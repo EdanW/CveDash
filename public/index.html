@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVE Dashboard - DDoS Vulnerabilities</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ CVE Dashboard</h1>
+            <p>Monitor and manage DDoS-related vulnerabilities</p>
+        </div>
+        
+        <div class="content">
+            <div class="stats">
+                <div class="stat-card">
+                    <h3 id="totalCVEs">0</h3>
+                    <p>Total CVEs</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="criticalCVEs">0</h3>
+                    <p>Critical Severity</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="avgCVSS">0.0</h3>
+                    <p>Average CVSS Score</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="activeCVEs">0</h3>
+                    <p>Active Vulnerabilities</p>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button class="btn btn-primary" onclick="openAddModal()">➕ Add New CVE</button>
+                <button class="btn btn-success" onclick="refreshData()">🔄 Refresh</button>
+                <button class="btn btn-warning" onclick="filterDDoSOnly()">🛡️ DDoS Only</button>
+            </div>
+            
+            <div id="cvesContainer" class="cves-grid">
+                <!-- CVEs will be loaded here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add/Edit Modal -->
+    <div id="cveModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">Add New CVE</h2>
+            <form id="cveForm">
+                <div class="form-group">
+                    <label for="cveId">CVE ID:</label>
+                    <input type="text" id="cveId" placeholder="CVE-2023-XXXX" required>
+                </div>
+                <div class="form-group">
+                    <label for="title">Title:</label>
+                    <input type="text" id="title" placeholder="Vulnerability title" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description:</label>
+                    <textarea id="description" rows="3" placeholder="Detailed description of the vulnerability" required></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="severity">Severity:</label>
+                        <select id="severity" required>
+                            <option value="">Select severity...</option>
+                            <option value="LOW">Low</option>
+                            <option value="MEDIUM">Medium</option>
+                            <option value="HIGH">High</option>
+                            <option value="CRITICAL">Critical</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="cvssScore">CVSS Score:</label>
+                        <input type="number" id="cvssScore" step="0.1" min="0" max="10" placeholder="0.0-10.0" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="attackVector">Attack Vector:</label>
+                    <select id="attackVector" required>
+                        <option value="">Select attack vector...</option>
+                        <option value="NETWORK">Network</option>
+                        <option value="ADJACENT_NETWORK">Adjacent Network</option>
+                        <option value="LOCAL">Local</option>
+                        <option value="PHYSICAL">Physical</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="affectedProducts">Affected Products:</label>
+                    <input type="text" id="affectedProducts" placeholder="Product v1.0, Product v2.0" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="publishedDate">Published Date:</label>
+                        <input type="date" id="publishedDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="lastModifiedDate">Last Modified:</label>
+                        <input type="date" id="lastModifiedDate" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="status">Status:</label>
+                    <select id="status" required>
+                        <option value="">Select status...</option>
+                        <option value="ACTIVE">Active</option>
+                        <option value="PATCHED">Patched</option>
+                        <option value="INVESTIGATING">Investigating</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="references">References:</label>
+                    <textarea id="references" rows="2" placeholder="https://nvd.nist.gov/vuln/detail/CVE-XXXX-XXXX" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="ddosRelated" checked> DDoS Related
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary">Save CVE</button>
+            </form>
+        </div>
+    </div>
+    
+    <script src="/script.js"></script>
+</body>
+</html> 
