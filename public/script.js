@@ -189,7 +189,86 @@ document.getElementById('cveForm').addEventListener('submit', async (e) => {
 // Close modal when clicking outside
 window.onclick = function(event) {
     const modal = document.getElementById('cveModal');
+    const randomModal = document.getElementById('randomCveModal');
     if (event.target === modal) {
         closeModal();
     }
+    if (event.target === randomModal) {
+        closeRandomModal();
+    }
+}
+
+// Random CVE functionality
+async function getRandomCVE() {
+    const modal = document.getElementById('randomCveModal');
+    const content = document.getElementById('randomCveContent');
+    
+    // Show modal with loading state
+    modal.style.display = 'block';
+    content.innerHTML = '<div class="loading">🎲 Fetching random CVE from NVD API...</div>';
+    
+    try {
+        const response = await fetch('/api/cves/random/nvd');
+        const data = await response.json();
+        
+        if (data.success) {
+            const cve = data.cve;
+            const severityClass = `severity-${cve.severity.toLowerCase()}`;
+            const statusClass = `status-${cve.status.toLowerCase()}`;
+            
+            content.innerHTML = `
+                <div class="random-cve-display">
+                    <h3>${cve.cveId} - ${cve.title}</h3>
+                    <div class="cve-description">${cve.description}</div>
+                    <div class="cve-info">
+                        <strong>Severity:</strong> 
+                        <span class="severity-badge ${severityClass}">${cve.severity}</span>
+                        <strong>CVSS Score:</strong> 
+                        <span class="cvss-score">${cve.cvssScore}</span>
+                    </div>
+                    <div class="cve-info">
+                        <strong>Status:</strong> 
+                        <span class="status-badge ${statusClass}">${cve.status}</span>
+                        <strong>DDoS Related:</strong> 
+                        <span style="color: ${cve.ddosRelated ? '#28a745' : '#dc3545'}; font-weight: bold;">
+                            ${cve.ddosRelated ? 'Yes' : 'No'}
+                        </span>
+                    </div>
+                    <div class="cve-info"><strong>Attack Vector:</strong> ${cve.attackVector}</div>
+                    <div class="cve-info"><strong>Published:</strong> ${formatDate(cve.publishedDate)}</div>
+                    <div class="cve-info"><strong>Modified:</strong> ${formatDate(cve.modifiedDate)}</div>
+                    <div class="affected-products">
+                        <strong>Affected Products:</strong> ${cve.affectedProducts.join(', ')}
+                    </div>
+                    <div class="references">
+                        <strong>References:</strong>
+                        ${cve.references.map(ref => `<a href="${ref}" target="_blank">${ref}</a>`).join('')}
+                    </div>
+                </div>
+                <div class="api-info">
+                    <h4>📊 API Information</h4>
+                    <p><strong>Total Results:</strong> ${data.apiInfo.totalResults.toLocaleString()}</p>
+                    <p><strong>Results Per Page:</strong> ${data.apiInfo.resultsPerPage}</p>
+                    <p><strong>API Timestamp:</strong> ${new Date(data.apiInfo.timestamp).toLocaleString()}</p>
+                </div>
+            `;
+        } else {
+            content.innerHTML = `
+                <div class="loading" style="color: #dc3545;">
+                    ❌ Error: ${data.error || 'Failed to fetch random CVE'}
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error fetching random CVE:', error);
+        content.innerHTML = `
+            <div class="loading" style="color: #dc3545;">
+                ❌ Error: Failed to connect to NVD API
+            </div>
+        `;
+    }
+}
+
+function closeRandomModal() {
+    document.getElementById('randomCveModal').style.display = 'none';
 } 
