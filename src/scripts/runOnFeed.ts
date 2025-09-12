@@ -13,7 +13,7 @@ function main() {
   const abs = path.resolve(feedPath);
   const entries = extractTableEntriesFromDataFeedFile(abs);
 
-  const outPath = path.resolve(process.cwd(), 'test_db.txt');
+  const outPath = path.resolve(process.cwd(), 'test_db_single_feed.txt');
   const ws = fs.createWriteStream(outPath, { encoding: 'utf8' });
   for (const e of entries) {
     ws.write(JSON.stringify(e));
