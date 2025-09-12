@@ -160,7 +160,7 @@ export type TableEntry = {
   cweIds: string[];
 };
 
-function buildTableEntryBase(cve: any) {
+export function buildTableEntryBase(cve: any) {
   return {
     id: cve?.id ?? cve?.cveId ?? '',
     sourceIdentifier: cve?.sourceIdentifier ?? '',
