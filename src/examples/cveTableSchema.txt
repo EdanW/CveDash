@@ -1,0 +1,20 @@
+
+{
+    id: string;
+    sourceIdentifier: string;
+    published: string;
+    lastModified: string;
+    vulnStatus: string;
+    description: string; // lang:en
+    metricVersion: number; // 2/3/3.1/4
+        // metric info
+    source: string
+    baseScore: number; //float
+    vectorString: string; // figure out what this means
+    baseSeverity: string; // LOW/MEDIUM/HIGH/CRITICAL V2 might not have!
+    attackVector: string; // NETWORK/ADJACENT_NETWORK/LOCAL/PHYSICAL V2: accessVector
+    attackComplexity: string; // LOW/MEDIUM/HIGH V2: accessComplexity
+    exploitabilityScore: number; // float ; not all versions have it
+    impactScore: number; // float ; not all versions have it
+    cweIds: string[];
+}
