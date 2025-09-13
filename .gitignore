@@ -5,6 +5,10 @@ yarn-debug.log*
 yarn-error.log*
 cveJsons/
 
+# Database files
+cve_database.db
+*.db
+
 # Build output
 dist/
 build/

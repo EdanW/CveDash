@@ -322,8 +322,9 @@ export class CveSqliteManager {
     minScore?: number;
     maxScore?: number;
     id?: string;
+    metricVersion?: string;
   } = {}): Promise<TableEntry[]> {
-    const { limit = 100, offset = 0, severity, minScore, maxScore, id } = options;
+    const { limit = 100, offset = 0, severity, minScore, maxScore, id, metricVersion } = options;
 
     await this.openDatabase();
 
@@ -348,6 +349,11 @@ export class CveSqliteManager {
     if (maxScore !== undefined) {
       whereClause += whereClause ? ' AND baseScore <= ?' : ' WHERE baseScore <= ?';
       params.push(maxScore);
+    }
+
+    if (metricVersion) {
+      whereClause += whereClause ? ' AND metricVersion = ?' : ' WHERE metricVersion = ?';
+      params.push(metricVersion);
     }
 
     const query = `
