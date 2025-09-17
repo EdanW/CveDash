@@ -1,5 +1,4 @@
 let cves = [];
-let editingId = null;
 let showDDoSOnly = false;
 
 // Map frontend metric version values to database values
@@ -17,7 +16,6 @@ function mapMetricVersion(frontendValue) {
 // Load CVEs on page load
 document.addEventListener('DOMContentLoaded', () => {
     loadCVEsOnce();
-    setDefaultDates();
     initSeverityChart();
     initMetricToggle();
 });
@@ -93,10 +91,6 @@ function displayCVEs() {
                 <strong>References:</strong>
                 ${cve.references.map(ref => `<a href="${ref}" target="_blank">${ref}</a>`).join('')}
             </div>
-            <div class="card-actions">
-                <button class="btn btn-primary" onclick="editCVE('${cve.id}')">Edit</button>
-                <button class="btn btn-danger" onclick="deleteCVE('${cve.id}')">Delete</button>
-            </div>
         `;
         container.appendChild(card);
     });
@@ -114,56 +108,6 @@ function updateStats() {
     document.getElementById('activeCVEs').textContent = activeCVEs;
 }
 
-function openAddModal() {
-    editingId = null;
-    document.getElementById('modalTitle').textContent = 'Add New CVE';
-    document.getElementById('cveForm').reset();
-    setDefaultDates();
-    document.getElementById('cveModal').style.display = 'block';
-}
-
-function closeModal() {
-    document.getElementById('cveModal').style.display = 'none';
-}
-
-function setDefaultDates() {
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('publishedDate').value = today;
-    document.getElementById('lastModifiedDate').value = today;
-}
-
-async function editCVE(id) {
-    const cve = cves.find(c => c.id === id);
-    if (!cve) return;
-    
-    editingId = id;
-    document.getElementById('modalTitle').textContent = 'Edit CVE';
-    document.getElementById('cveId').value = cve.cveId;
-    document.getElementById('title').value = cve.title;
-    document.getElementById('description').value = cve.description;
-    document.getElementById('severity').value = cve.severity;
-    document.getElementById('cvssScore').value = cve.cvssScore;
-    document.getElementById('attackVector').value = cve.attackVector;
-    document.getElementById('affectedProducts').value = cve.affectedProducts.join(', ');
-    document.getElementById('publishedDate').value = cve.publishedDate;
-    document.getElementById('lastModifiedDate').value = cve.lastModifiedDate;
-    document.getElementById('status').value = cve.status;
-    document.getElementById('references').value = cve.references.join('\n');
-    document.getElementById('ddosRelated').checked = cve.ddosRelated;
-    
-    document.getElementById('cveModal').style.display = 'block';
-}
-
-async function deleteCVE(id) {
-    if (!confirm('Are you sure you want to delete this CVE?')) return;
-    
-    try {
-        await fetch(`/api/cves/${id}`, { method: 'DELETE' });
-        await loadCVEs();
-    } catch (error) {
-        console.error('Error deleting CVE:', error);
-    }
-}
 
 async function refreshData() {
     // Only refresh the pie chart with current metric version
@@ -409,51 +353,10 @@ function initMetricToggle() {
     });
 }
 
-// Form submission
-document.getElementById('cveForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const formData = {
-        cveId: document.getElementById('cveId').value,
-        title: document.getElementById('title').value,
-        description: document.getElementById('description').value,
-        severity: document.getElementById('severity').value,
-        cvssScore: document.getElementById('cvssScore').value,
-        attackVector: document.getElementById('attackVector').value,
-        affectedProducts: document.getElementById('affectedProducts').value.split(',').map(p => p.trim()),
-        publishedDate: document.getElementById('publishedDate').value,
-        lastModifiedDate: document.getElementById('lastModifiedDate').value,
-        status: document.getElementById('status').value,
-        references: document.getElementById('references').value.split('\n').filter(r => r.trim()),
-        ddosRelated: document.getElementById('ddosRelated').checked
-    };
-    
-    try {
-        const url = editingId ? `/api/cves/${editingId}` : '/api/cves';
-        const method = editingId ? 'PUT' : 'POST';
-        
-        const response = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(formData)
-        });
-        
-        if (response.ok) {
-            closeModal();
-            await loadCVEs();
-        }
-    } catch (error) {
-        console.error('Error saving CVE:', error);
-    }
-});
 
 // Close modal when clicking outside
 window.onclick = function(event) {
-    const modal = document.getElementById('cveModal');
     const randomModal = document.getElementById('randomCveModal');
-    if (event.target === modal) {
-        closeModal();
-    }
     if (event.target === randomModal) {
         closeRandomModal();
     }

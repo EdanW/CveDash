@@ -97,7 +97,6 @@ let cves: CVE[] = [
   }
 ];
 
-let nextId = 6;
 
 // GET all CVEs from SQLite database
 router.get('/all', async (req, res) => {
@@ -204,77 +203,8 @@ router.get('/:id', (req, res) => {
   res.json(cve);
 });
 
-// POST new CVE
-router.post('/', (req, res) => {
-  const { cveId, title, description, severity, cvssScore, attackVector, affectedProducts, publishedDate, lastModifiedDate, status, ddosRelated, references } = req.body;
-  
-  if (!cveId || !title || !description || !severity || cvssScore === undefined || !attackVector || !affectedProducts || !publishedDate || !lastModifiedDate || !status || ddosRelated === undefined || !references) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-  
-  const newCVE: CVE = {
-    id: nextId.toString(),
-    cveId,
-    title,
-    description,
-    severity,
-    cvssScore: parseFloat(cvssScore),
-    attackVector,
-    affectedProducts: Array.isArray(affectedProducts) ? affectedProducts : [affectedProducts],
-    publishedDate,
-    lastModifiedDate,
-    status,
-    ddosRelated: Boolean(ddosRelated),
-    references: Array.isArray(references) ? references : [references]
-  };
-  
-  cves.push(newCVE);
-  nextId++;
-  res.status(201).json(newCVE);
-});
 
-// PUT update CVE
-router.put('/:id', (req, res) => {
-  const id = req.params.id;
-  const cveIndex = cves.findIndex(c => c.id === id);
-  
-  if (cveIndex === -1) {
-    return res.status(404).json({ error: 'CVE not found' });
-  }
-  
-  const { cveId, title, description, severity, cvssScore, attackVector, affectedProducts, publishedDate, lastModifiedDate, status, ddosRelated, references } = req.body;
-  
-  cves[cveIndex] = {
-    ...cves[cveIndex],
-    cveId: cveId || cves[cveIndex].cveId,
-    title: title || cves[cveIndex].title,
-    description: description || cves[cveIndex].description,
-    severity: severity || cves[cveIndex].severity,
-    cvssScore: cvssScore !== undefined ? parseFloat(cvssScore) : cves[cveIndex].cvssScore,
-    attackVector: attackVector || cves[cveIndex].attackVector,
-    affectedProducts: affectedProducts || cves[cveIndex].affectedProducts,
-    publishedDate: publishedDate || cves[cveIndex].publishedDate,
-    lastModifiedDate: lastModifiedDate || cves[cveIndex].lastModifiedDate,
-    status: status || cves[cveIndex].status,
-    ddosRelated: ddosRelated !== undefined ? Boolean(ddosRelated) : cves[cveIndex].ddosRelated,
-    references: references || cves[cveIndex].references
-  };
-  
-  res.json(cves[cveIndex]);
-});
 
-// DELETE CVE
-router.delete('/:id', (req, res) => {
-  const id = req.params.id;
-  const cveIndex = cves.findIndex(c => c.id === id);
-  
-  if (cveIndex === -1) {
-    return res.status(404).json({ error: 'CVE not found' });
-  }
-  
-  const deletedCVE = cves.splice(cveIndex, 1)[0];
-  res.json(deletedCVE);
-});
 
 // GET severity distribution from SQLite (defaults to CVSS 3.1)
 router.get('/stats/severity', async (req, res) => {
