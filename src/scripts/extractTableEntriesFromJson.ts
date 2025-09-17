@@ -158,6 +158,7 @@ export type TableEntry = {
   exploitabilityScore: number;
   impactScore: number;
   cweIds: string[];
+  isDdosRelated: boolean;
 };
 
 export function buildTableEntryBase(cve: any) {
@@ -169,7 +170,8 @@ export function buildTableEntryBase(cve: any) {
     vulnStatus: cve?.vulnStatus ?? '',
     description: getEnglishDescription(cve),
     cweIds: getCweIds(cve),
-  } as Pick<TableEntry, 'id' | 'sourceIdentifier' | 'published' | 'lastModified' | 'vulnStatus' | 'description' | 'cweIds'>;
+    isDdosRelated: false,
+  } as Pick<TableEntry, 'id' | 'sourceIdentifier' | 'published' | 'lastModified' | 'vulnStatus' | 'description' | 'cweIds' | 'isDdosRelated'>;
 }
 
 function toTableEntry(base: ReturnType<typeof buildTableEntryBase>, m: FlatMetric): TableEntry {

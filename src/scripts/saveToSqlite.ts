@@ -111,6 +111,7 @@ export class CveSqliteManager {
         exploitabilityScore REAL,
         impactScore REAL,
         cweIds TEXT, -- JSON string
+        isDdosRelated INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (id, metricVersion)
@@ -262,17 +263,17 @@ export class CveSqliteManager {
       INSERT OR REPLACE INTO ${this.tableName} (
         id, sourceIdentifier, published, lastModified, vulnStatus, description,
         metricVersion, source, baseScore, vectorString, baseSeverity,
-        attackVector, attackComplexity, exploitabilityScore, impactScore, cweIds,
+        attackVector, attackComplexity, exploitabilityScore, impactScore, cweIds, isDdosRelated,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `
       : `
       INSERT OR IGNORE INTO ${this.tableName} (
         id, sourceIdentifier, published, lastModified, vulnStatus, description,
         metricVersion, source, baseScore, vectorString, baseSeverity,
-        attackVector, attackComplexity, exploitabilityScore, impactScore, cweIds,
+        attackVector, attackComplexity, exploitabilityScore, impactScore, cweIds, isDdosRelated,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `;
 
     return new Promise((resolve, reject) => {
@@ -298,7 +299,8 @@ export class CveSqliteManager {
             entry.attackComplexity,
             entry.exploitabilityScore !== -1 ? entry.exploitabilityScore : null,
             entry.impactScore !== -1 ? entry.impactScore : null,
-            entry.cweIds && entry.cweIds.length > 0 ? JSON.stringify(entry.cweIds) : null
+            entry.cweIds && entry.cweIds.length > 0 ? JSON.stringify(entry.cweIds) : null,
+            entry.isDdosRelated ? 1 : 0
           ], (err) => {
             if (err) {
               reject(new Error(`Failed to insert entry ${index}: ${err.message}`));
@@ -397,7 +399,8 @@ export class CveSqliteManager {
             attackComplexity: row.attackComplexity,
             exploitabilityScore: row.exploitabilityScore || -1,
             impactScore: row.impactScore || -1,
-            cweIds: row.cweIds ? JSON.parse(row.cweIds) : []
+            cweIds: row.cweIds ? JSON.parse(row.cweIds) : [],
+            isDdosRelated: !!row.isDdosRelated
           }));
           resolve(entries);
         }
@@ -520,7 +523,8 @@ export async function exampleSqliteUsage(): Promise<void> {
       attackComplexity: 'LOW',
       exploitabilityScore: 3.9,
       impactScore: 3.6,
-      cweIds: ['CWE-79', 'CWE-89']
+        cweIds: ['CWE-79', 'CWE-89'],
+        isDdosRelated: false
     }
   ];
 

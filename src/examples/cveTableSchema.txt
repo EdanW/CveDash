@@ -17,4 +17,5 @@
     exploitabilityScore: number; // float ; not all versions have it
     impactScore: number; // float ; not all versions have it
     cweIds: string[];
+    isDdosRelated: boolean;
 }

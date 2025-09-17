@@ -6,6 +6,8 @@ let showDDoSOnly = false;
 document.addEventListener('DOMContentLoaded', () => {
     loadCVEs();
     setDefaultDates();
+    initSeverityChart();
+    initMetricToggle();
 });
 
 async function loadCVEs() {
@@ -158,14 +160,102 @@ async function showSeverityDistribution() {
             return;
         }
         const dist = data.distribution || {};
-        const lines = Object.keys(dist)
-            .sort()
-            .map(key => `${key}: ${dist[key]}`);
-        alert(`Severity distribution (metric ${data.metricVersion}):\n\n` + (lines.length ? lines.join('\n') : 'No data'));
+        renderSeverityChart(dist, data.metricVersion);
     } catch (e) {
         console.error('Error fetching severity distribution', e);
-        alert('Error fetching severity distribution');
     }
+}
+
+// Initialize and render severity pie chart
+let severityChartInstance = null;
+
+function initSeverityChart() {
+    // Fetch immediately on load
+    showSeverityDistribution();
+}
+
+function renderSeverityChart(distribution, metricVersion) {
+    const ctx = document.getElementById('severityChart');
+    if (!ctx) return;
+
+    const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
+    const labels = [];
+    const data = [];
+
+    order.forEach((k) => {
+        if (distribution[k] !== undefined) {
+            labels.push(k);
+            data.push(distribution[k]);
+        }
+    });
+
+    const colors = {
+        CRITICAL: '#dc3545',
+        HIGH: '#fd7e14',
+        MEDIUM: '#ffc107',
+        LOW: '#28a745',
+        UNKNOWN: '#6c757d'
+    };
+
+    const backgroundColor = labels.map(l => colors[l] || '#6c757d');
+
+    if (severityChartInstance) {
+        severityChartInstance.destroy();
+    }
+
+    severityChartInstance = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels,
+            datasets: [{
+                data,
+                backgroundColor,
+                borderColor: '#222',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: '#ffffff',
+                        generateLabels: (chart) => {
+                            const dataset = chart.data.datasets[0];
+                            return chart.data.labels.map((label, i) => ({
+                                text: label.charAt(0) + label.slice(1).toLowerCase(),
+                                fillStyle: dataset.backgroundColor[i],
+                                strokeStyle: dataset.backgroundColor[i],
+                                lineWidth: 1,
+                                hidden: !chart.getDataVisibility(i),
+                                index: i
+                            }));
+                        }
+                    }
+                },
+                title: {
+                    display: true,
+                    text: `Severity Distribution (Metric ${metricVersion})`,
+                    color: '#ffffff'
+                }
+            },
+            layout: { padding: 0 },
+            responsive: true
+        }
+    });
+}
+
+// Metric version toggle (UI only; no data logic yet)
+function initMetricToggle() {
+    const select = document.getElementById('metricVersionSelect');
+    if (!select) return;
+    // Persist selection in-memory for now
+    window.currentMetricVersion = select.value || 'latest';
+    select.addEventListener('change', (e) => {
+        window.currentMetricVersion = e.target.value;
+        // Hook: later we will refetch/update charts and lists based on selection
+        // For now, no logic is executed
+    });
 }
 
 // Form submission
