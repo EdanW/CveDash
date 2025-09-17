@@ -148,6 +148,26 @@ function formatDate(dateString) {
     return new Date(dateString).toLocaleDateString();
 }
 
+// Fetch and display severity distribution in a simple popup
+async function showSeverityDistribution() {
+    try {
+        const response = await fetch('/api/cves/stats/severity');
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            alert('Failed to load severity distribution');
+            return;
+        }
+        const dist = data.distribution || {};
+        const lines = Object.keys(dist)
+            .sort()
+            .map(key => `${key}: ${dist[key]}`);
+        alert(`Severity distribution (metric ${data.metricVersion}):\n\n` + (lines.length ? lines.join('\n') : 'No data'));
+    } catch (e) {
+        console.error('Error fetching severity distribution', e);
+        alert('Error fetching severity distribution');
+    }
+}
+
 // Form submission
 document.getElementById('cveForm').addEventListener('submit', async (e) => {
     e.preventDefault();

@@ -166,9 +166,10 @@ export class CveSqliteManager {
       createBackup?: boolean;
       batchSize?: number;
       verbose?: boolean;
+      saveMode?: 'upsert' | 'insertOnly';
     } = {}
   ): Promise<void> {
-    const { createBackup = true, batchSize = 1000, verbose = false } = options;
+    const { createBackup = true, batchSize = 1000, verbose = false, saveMode = 'upsert' } = options;
 
     if (verbose) {
       console.log(`[SQLite] Starting save operation for ${entries.length} entries to ${this.dbPath}`);
@@ -199,7 +200,7 @@ export class CveSqliteManager {
       }
 
       // Process entries in batches
-      await this.processEntriesInBatches(entries, batchSize, verbose);
+      await this.processEntriesInBatches(entries, batchSize, verbose, saveMode);
 
       if (verbose) {
         console.log(`[SQLite] Successfully saved ${entries.length} entries to ${this.dbPath}`);
@@ -232,7 +233,8 @@ export class CveSqliteManager {
   private async processEntriesInBatches(
     entries: TableEntry[],
     batchSize: number,
-    verbose: boolean
+    verbose: boolean,
+    saveMode: 'upsert' | 'insertOnly'
   ): Promise<void> {
     const totalBatches = Math.ceil(entries.length / batchSize);
     
@@ -245,18 +247,27 @@ export class CveSqliteManager {
         console.log(`[SQLite] Processing batch ${i + 1}/${totalBatches} (${batch.length} entries)`);
       }
       
-      await this.processBatch(batch);
+      await this.processBatch(batch, saveMode);
     }
   }
 
   /**
    * Process a single batch of entries using INSERT OR REPLACE
    */
-  private async processBatch(entries: TableEntry[]): Promise<void> {
+  private async processBatch(entries: TableEntry[], saveMode: 'upsert' | 'insertOnly'): Promise<void> {
     if (!this.db || entries.length === 0) return;
 
-    const insertSQL = `
+    const insertSQL = saveMode === 'upsert'
+      ? `
       INSERT OR REPLACE INTO ${this.tableName} (
+        id, sourceIdentifier, published, lastModified, vulnStatus, description,
+        metricVersion, source, baseScore, vectorString, baseSeverity,
+        attackVector, attackComplexity, exploitabilityScore, impactScore, cweIds,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `
+      : `
+      INSERT OR IGNORE INTO ${this.tableName} (
         id, sourceIdentifier, published, lastModified, vulnStatus, description,
         metricVersion, source, baseScore, vectorString, baseSeverity,
         attackVector, attackComplexity, exploitabilityScore, impactScore, cweIds,
@@ -480,6 +491,7 @@ export async function saveTableEntriesToSqlite(
     createBackup?: boolean;
     batchSize?: number;
     verbose?: boolean;
+    saveMode?: 'upsert' | 'insertOnly';
   } = {}
 ): Promise<void> {
   const manager = new CveSqliteManager(dbPath, options.tableName);

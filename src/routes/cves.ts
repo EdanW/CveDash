@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { CVE } from '../types/cve';
 import { NvdWrapper } from '../services/nvd';
+import { getSeveritiesDistribution } from '../queries/getSeveritiesDistribution';
+import { MetricVersion } from '../scripts/extractTableEntriesFromJson';
 
 const router = Router();
 
@@ -230,6 +232,20 @@ router.delete('/:id', (req, res) => {
   
   const deletedCVE = cves.splice(cveIndex, 1)[0];
   res.json(deletedCVE);
+});
+
+// GET severity distribution from SQLite (defaults to CVSS 3.1)
+router.get('/stats/severity', async (req, res) => {
+  try {
+    const metricParam = (req.query.metricVersion as string) || 'V31';
+    const validVersions = new Set(['V20', 'V30', 'V31', 'V40']);
+    const versionKey = validVersions.has(metricParam) ? (metricParam as keyof typeof MetricVersion) : 'V31';
+    const distribution = await getSeveritiesDistribution(MetricVersion[versionKey]);
+    res.json({ success: true, metricVersion: versionKey, distribution });
+  } catch (error: any) {
+    console.error('Error getting severity distribution:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to get severity distribution' });
+  }
 });
 
 export default router; 
