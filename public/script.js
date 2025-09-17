@@ -2,23 +2,61 @@ let cves = [];
 let editingId = null;
 let showDDoSOnly = false;
 
+// Map frontend metric version values to database values
+function mapMetricVersion(frontendValue) {
+    const mapping = {
+        'latest': '3.1',  // Default to CVSS 3.1
+        'v2': '2.0',
+        'v3.0': '3.0', 
+        'v3.1': '3.1',
+        'v4.0': '4.0'
+    };
+    return mapping[frontendValue] || '3.1';
+}
+
 // Load CVEs on page load
 document.addEventListener('DOMContentLoaded', () => {
-    loadCVEs();
+    loadCVEsOnce();
     setDefaultDates();
     initSeverityChart();
     initMetricToggle();
 });
 
-async function loadCVEs() {
+// Load CVEs once on page load from static data
+async function loadCVEsOnce() {
     try {
-        const response = await fetch('/api/cves');
-        cves = await response.json();
+        // For now, use a small sample dataset instead of loading everything
+        // This avoids the massive API call and database query
+        cves = [
+            {
+                id: '1',
+                cveId: 'CVE-2023-1234',
+                title: 'Sample CVE for Testing',
+                description: 'This is a sample CVE entry for testing the dashboard.',
+                severity: 'HIGH',
+                cvssScore: 8.5,
+                attackVector: 'NETWORK',
+                affectedProducts: ['Sample Product v1.0'],
+                publishedDate: '2023-01-15',
+                lastModifiedDate: '2023-01-20',
+                status: 'ACTIVE',
+                ddosRelated: true,
+                references: ['https://nvd.nist.gov/vuln/detail/CVE-2023-1234']
+            }
+        ];
+        
         displayCVEs();
         updateStats();
     } catch (error) {
         console.error('Error loading CVEs:', error);
+        alert(`Error loading CVE data: ${error.message}`);
     }
+}
+
+// Legacy function - now just updates display with current data
+async function loadCVEs() {
+    displayCVEs();
+    updateStats();
 }
 
 function displayCVEs() {
@@ -128,7 +166,8 @@ async function deleteCVE(id) {
 }
 
 async function refreshData() {
-    await loadCVEs();
+    // Only refresh the pie chart with current metric version
+    await showSeverityDistribution();
 }
 
 function filterDDoSOnly() {
@@ -152,17 +191,28 @@ function formatDate(dateString) {
 
 // Fetch and display severity distribution in a simple popup
 async function showSeverityDistribution() {
+    // Show loading state
+    showChartLoading();
+    
     try {
-        const response = await fetch('/api/cves/stats/severity');
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-            alert('Failed to load severity distribution');
-            return;
+        const metricVersion = window.currentMetricVersion || 'latest';
+        const mappedVersion = mapMetricVersion(metricVersion);
+        const response = await fetch(`/api/cves/stats/severity?metricVersion=${encodeURIComponent(mappedVersion)}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
+        
+        const data = await response.json();
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to load severity distribution');
+        }
+        
         const dist = data.distribution || {};
         renderSeverityChart(dist, data.metricVersion);
     } catch (e) {
         console.error('Error fetching severity distribution', e);
+        showChartError(`Error loading severity distribution: ${e.message}`);
     }
 }
 
@@ -172,6 +222,98 @@ let severityChartInstance = null;
 function initSeverityChart() {
     // Fetch immediately on load
     showSeverityDistribution();
+}
+
+// Show loading state in the chart area
+function showChartLoading() {
+    const ctx = document.getElementById('severityChart');
+    if (!ctx) return;
+    
+    // Clear any existing chart
+    if (severityChartInstance) {
+        severityChartInstance.destroy();
+        severityChartInstance = null;
+    }
+    
+    // Create a simple loading chart
+    severityChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Loading...'],
+            datasets: [{
+                data: [1],
+                backgroundColor: ['#6c757d'],
+                borderColor: '#222',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: '🔄 Loading Severity Distribution...',
+                    color: '#ffffff',
+                    font: {
+                        size: 16
+                    }
+                }
+            },
+            layout: { padding: 20 },
+            responsive: true,
+            animation: {
+                duration: 0 // Disable animation for loading state
+            }
+        }
+    });
+}
+
+// Show error state in the chart area
+function showChartError(message) {
+    const ctx = document.getElementById('severityChart');
+    if (!ctx) return;
+    
+    // Clear any existing chart
+    if (severityChartInstance) {
+        severityChartInstance.destroy();
+        severityChartInstance = null;
+    }
+    
+    // Create a simple error chart
+    severityChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Error'],
+            datasets: [{
+                data: [1],
+                backgroundColor: ['#dc3545'],
+                borderColor: '#222',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: `❌ ${message}`,
+                    color: '#dc3545',
+                    font: {
+                        size: 14
+                    }
+                }
+            },
+            layout: { padding: 20 },
+            responsive: true,
+            animation: {
+                duration: 0 // Disable animation for error state
+            }
+        }
+    });
 }
 
 function renderSeverityChart(distribution, metricVersion) {
@@ -235,7 +377,7 @@ function renderSeverityChart(distribution, metricVersion) {
                 },
                 title: {
                     display: true,
-                    text: `Severity Distribution (Metric ${metricVersion})`,
+                    text: `Severity Distribution (CVSS ${metricVersion})`,
                     color: '#ffffff'
                 }
             },
@@ -245,16 +387,25 @@ function renderSeverityChart(distribution, metricVersion) {
     });
 }
 
-// Metric version toggle (UI only; no data logic yet)
+// Metric version toggle with persistence
 function initMetricToggle() {
     const select = document.getElementById('metricVersionSelect');
     if (!select) return;
-    // Persist selection in-memory for now
-    window.currentMetricVersion = select.value || 'latest';
+    
+    // Load saved metric version from localStorage
+    const savedMetricVersion = localStorage.getItem('metricVersion') || 'latest';
+    select.value = savedMetricVersion;
+    window.currentMetricVersion = savedMetricVersion;
+    
     select.addEventListener('change', (e) => {
-        window.currentMetricVersion = e.target.value;
-        // Hook: later we will refetch/update charts and lists based on selection
-        // For now, no logic is executed
+        const newValue = e.target.value;
+        window.currentMetricVersion = newValue;
+        
+        // Persist the selection
+        localStorage.setItem('metricVersion', newValue);
+        
+        // Refetch data with new metric version
+        refreshData();
     });
 }
 
@@ -318,7 +469,9 @@ async function getRandomCVE() {
     content.innerHTML = '<div class="loading">🎲 Fetching random CVE from NVD API...</div>';
     
     try {
-        const response = await fetch('/api/cves/random/nvd');
+        const metricVersion = window.currentMetricVersion || 'latest';
+        const mappedVersion = mapMetricVersion(metricVersion);
+        const response = await fetch(`/api/cves/random/nvd?metricVersion=${encodeURIComponent(mappedVersion)}`);
         const data = await response.json();
         
         if (data.success) {

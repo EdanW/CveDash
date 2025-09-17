@@ -99,14 +99,55 @@ let cves: CVE[] = [
 
 let nextId = 6;
 
-// GET all CVEs
+// GET all CVEs from SQLite database
+router.get('/all', async (req, res) => {
+  try {
+    // Load all CVE data from the SQLite database
+    const { CveSqliteManager } = await import('../scripts/saveToSqlite');
+    const manager = new CveSqliteManager('./cve_database.db');
+    
+    // Get all entries from the database
+    const allEntries = await manager.queryEntries({ limit: 10000 }); // Large limit to get all
+    
+    // Transform database entries to frontend format
+    const transformedCves = allEntries.map(entry => ({
+      id: entry.id,
+      cveId: entry.id,
+      title: `CVE ${entry.id}`,
+      description: entry.description || 'No description available',
+      severity: entry.baseSeverity || 'UNKNOWN',
+      cvssScore: entry.baseScore || 0,
+      attackVector: entry.attackVector || 'NETWORK',
+      affectedProducts: [], // Not in database schema
+      publishedDate: entry.published || new Date().toISOString().split('T')[0],
+      lastModifiedDate: entry.lastModified || new Date().toISOString().split('T')[0],
+      status: entry.vulnStatus === 'Analyzed' ? 'ACTIVE' : 'INVESTIGATING',
+      ddosRelated: Boolean(entry.isDdosRelated),
+      references: [`https://nvd.nist.gov/vuln/detail/${entry.id}`]
+    }));
+    
+    await manager.close();
+    res.json(transformedCves);
+  } catch (error) {
+    console.error('Error loading CVEs from database:', error);
+    res.status(500).json({ error: 'Failed to load CVEs from database' });
+  }
+});
+
+// GET all CVEs (legacy endpoint)
 router.get('/', (req, res) => {
+  const metricVersion = req.query.metricVersion as string;
+  
+  // For now, return all CVEs regardless of metric version
+  // In a real implementation, you would filter based on metricVersion
+  // This would require querying the database with the specific metric version
   res.json(cves);
 });
 
 // GET random CVE from NVD API
 router.get('/random/nvd', async (req, res) => {
   try {
+    const metricVersion = req.query.metricVersion as string;
     const nvd = new NvdWrapper();
     
     // Get recent CVEs (last 30 days) to ensure we get valid CVEs
@@ -134,6 +175,7 @@ router.get('/random/nvd', async (req, res) => {
       success: true,
       message: 'Random CVE fetched from NVD API',
       cve: internalCve,
+      metricVersion: metricVersion || 'V31',
       apiInfo: {
         totalResults: response.totalResults,
         resultsPerPage: response.resultsPerPage,
@@ -237,11 +279,20 @@ router.delete('/:id', (req, res) => {
 // GET severity distribution from SQLite (defaults to CVSS 3.1)
 router.get('/stats/severity', async (req, res) => {
   try {
-    const metricParam = (req.query.metricVersion as string) || 'V31';
-    const validVersions = new Set(['V20', 'V30', 'V31', 'V40']);
-    const versionKey = validVersions.has(metricParam) ? (metricParam as keyof typeof MetricVersion) : 'V31';
-    const distribution = await getSeveritiesDistribution(MetricVersion[versionKey]);
-    res.json({ success: true, metricVersion: versionKey, distribution });
+    const metricParam = (req.query.metricVersion as string) || '3.1';
+    const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
+    const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
+    
+    // Map database values to MetricVersion enum
+    const versionMapping: Record<string, MetricVersion> = {
+      '2.0': MetricVersion.V20,
+      '3.0': MetricVersion.V30,
+      '3.1': MetricVersion.V31,
+      '4.0': MetricVersion.V40
+    };
+    
+    const distribution = await getSeveritiesDistribution(versionMapping[versionValue]);
+    res.json({ success: true, metricVersion: versionValue, distribution });
   } catch (error: any) {
     console.error('Error getting severity distribution:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get severity distribution' });
