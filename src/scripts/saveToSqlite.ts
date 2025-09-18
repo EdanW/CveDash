@@ -336,8 +336,9 @@ export class CveSqliteManager {
     maxScore?: number;
     id?: string;
     metricVersion?: string;
+    isDdosRelated?: boolean;
   } = {}): Promise<TableEntry[]> {
-    const { limit = 100, offset = 0, severity, minScore, maxScore, id, metricVersion } = options;
+    const { limit = 100, offset = 0, severity, minScore, maxScore, id, metricVersion, isDdosRelated } = options;
 
     await this.openDatabase();
 
@@ -367,6 +368,11 @@ export class CveSqliteManager {
     if (metricVersion) {
       whereClause += whereClause ? ' AND metricVersion = ?' : ' WHERE metricVersion = ?';
       params.push(metricVersion);
+    }
+
+    if (isDdosRelated !== undefined) {
+      whereClause += whereClause ? ' AND isDdosRelated = ?' : ' WHERE isDdosRelated = ?';
+      params.push(isDdosRelated ? 1 : 0);
     }
 
     const query = `

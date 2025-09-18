@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { CVE } from '../types/cve';
 import { NvdWrapper } from '../services/nvd';
-import { getSeveritiesDistribution } from '../queries/getSeveritiesDistribution';
+import { getSeveritiesDistribution, getMetricVersionStats, getYearlyCveTrends } from '../queries/getSeveritiesDistribution';
 import { MetricVersion } from '../scripts/extractTableEntriesFromJson';
 
 const router = Router();
@@ -206,6 +206,51 @@ router.get('/:id', (req, res) => {
 
 
 
+// GET total CVE count for specific metric version with DDoS ratio
+router.get('/stats/count', async (req, res) => {
+  try {
+    const metricParam = (req.query.metricVersion as string) || '3.1';
+    const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
+    const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
+    
+    // Map database values to MetricVersion enum
+    const versionMapping: Record<string, MetricVersion> = {
+      '2.0': MetricVersion.V20,
+      '3.0': MetricVersion.V30,
+      '3.1': MetricVersion.V31,
+      '4.0': MetricVersion.V40
+    };
+    
+    // Get both DDoS and non-DDoS stats
+    const [ddosStats, nonDdosStats] = await Promise.all([
+      getMetricVersionStats(versionMapping[versionValue], undefined, true), // DDoS-related
+      getMetricVersionStats(versionMapping[versionValue], undefined, false) // Non-DDoS-related
+    ]);
+    
+    const totalCount = ddosStats.totalEntries + nonDdosStats.totalEntries;
+    const ddosCount = ddosStats.totalEntries;
+    const nonDdosCount = nonDdosStats.totalEntries;
+    
+    // Calculate ratio
+    const ddosRatio = totalCount > 0 ? (ddosCount / totalCount * 100).toFixed(1) : '0.0';
+    const nonDdosRatio = totalCount > 0 ? (nonDdosCount / totalCount * 100).toFixed(1) : '0.0';
+    
+    res.json({ 
+      success: true, 
+      metricVersion: versionValue, 
+      totalCount,
+      ddosCount,
+      nonDdosCount,
+      ddosRatio: parseFloat(ddosRatio),
+      nonDdosRatio: parseFloat(nonDdosRatio),
+      averageScore: ddosStats.averageScore // Use DDoS average score
+    });
+  } catch (error: any) {
+    console.error('Error getting CVE count:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to get CVE count' });
+  }
+});
+
 // GET severity distribution from SQLite (defaults to CVSS 3.1)
 router.get('/stats/severity', async (req, res) => {
   try {
@@ -226,6 +271,29 @@ router.get('/stats/severity', async (req, res) => {
   } catch (error: any) {
     console.error('Error getting severity distribution:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get severity distribution' });
+  }
+});
+
+// GET yearly CVE trends from SQLite (all CVEs, not just DDoS)
+router.get('/stats/yearly-trends', async (req, res) => {
+  try {
+    const metricParam = (req.query.metricVersion as string) || '3.1';
+    const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
+    const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
+    
+    // Map database values to MetricVersion enum
+    const versionMapping: Record<string, MetricVersion> = {
+      '2.0': MetricVersion.V20,
+      '3.0': MetricVersion.V30,
+      '3.1': MetricVersion.V31,
+      '4.0': MetricVersion.V40
+    };
+    
+    const yearlyData = await getYearlyCveTrends(versionMapping[versionValue]);
+    res.json({ success: true, metricVersion: versionValue, yearlyData });
+  } catch (error: any) {
+    console.error('Error getting yearly CVE trends:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to get yearly CVE trends' });
   }
 });
 

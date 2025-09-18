@@ -27,7 +27,7 @@
             <div class="stats">
                 <div class="stat-card">
                     <h3 id="totalCVEs">0</h3>
-                    <p>Total CVEs</p>
+                    <p id="totalCVEsLabel">DDoS vs Other CVEs</p>
                 </div>
                 <div class="stat-card">
                     <h3 id="criticalCVEs">0</h3>
@@ -53,6 +53,13 @@
                 <h3 class="widget-title">📊 Severity Distribution</h3>
                 <div class="widget-canvas-wrap">
                     <canvas id="severityChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card yearly-trends-widget">
+                <h3 class="widget-title">📈 CVE Trends by Year</h3>
+                <div class="widget-canvas-wrap">
+                    <canvas id="yearlyTrendsChart"></canvas>
                 </div>
             </div>
             

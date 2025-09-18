@@ -17,6 +17,7 @@ function mapMetricVersion(frontendValue) {
 document.addEventListener('DOMContentLoaded', () => {
     loadCVEsOnce();
     initSeverityChart();
+    initYearlyTrendsChart();
     initMetricToggle();
 });
 
@@ -96,22 +97,68 @@ function displayCVEs() {
     });
 }
 
-function updateStats() {
-    const totalCVEs = cves.length;
+async function updateStats() {
+    // Show loading state for total CVEs and average CVSS
+    document.getElementById('totalCVEs').textContent = '⏳';
+    document.getElementById('avgCVSS').textContent = '⏳';
+    
+    // Update the label with current metric version
+    const metricVersion = window.currentMetricVersion || 'latest';
+    const mappedVersion = mapMetricVersion(metricVersion);
+    const versionDisplay = metricVersion === 'latest' ? 'CVSS 3.1' : `CVSS ${mappedVersion}`;
+    document.getElementById('totalCVEsLabel').textContent = `DDoS vs Other CVEs (${versionDisplay})`;
+    
+    try {
+        // Fetch total CVE count from database based on current metric version
+        const response = await fetch(`/api/cves/stats/count?metricVersion=${encodeURIComponent(mappedVersion)}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                // Display ratio information with percentage on separate line
+                const ratioText = `${data.ddosCount.toLocaleString()} / ${data.nonDdosCount.toLocaleString()}<br>${data.ddosRatio}%`;
+                document.getElementById('totalCVEs').innerHTML = ratioText;
+                document.getElementById('avgCVSS').textContent = data.averageScore.toFixed(1);
+            } else {
+                console.error('Failed to get CVE count:', data.error);
+                // Fallback to local data
+                updateStatsFromLocalData();
+            }
+        } else {
+            console.error('HTTP error getting CVE count:', response.status);
+            // Fallback to local data
+            updateStatsFromLocalData();
+        }
+    } catch (error) {
+        console.error('Error fetching CVE count:', error);
+        // Fallback to local data
+        updateStatsFromLocalData();
+    }
+    
+    // Update other stats from local data (these don't depend on metric version)
     const criticalCVEs = cves.filter(c => c.severity === 'CRITICAL').length;
-    const avgCVSS = cves.length > 0 ? (cves.reduce((sum, c) => sum + c.cvssScore, 0) / cves.length).toFixed(1) : '0.0';
     const activeCVEs = cves.filter(c => c.status === 'ACTIVE').length;
     
-    document.getElementById('totalCVEs').textContent = totalCVEs;
     document.getElementById('criticalCVEs').textContent = criticalCVEs;
-    document.getElementById('avgCVSS').textContent = avgCVSS;
     document.getElementById('activeCVEs').textContent = activeCVEs;
+}
+
+function updateStatsFromLocalData() {
+    const totalCVEs = cves.length;
+    const avgCVSS = cves.length > 0 ? (cves.reduce((sum, c) => sum + c.cvssScore, 0) / cves.length).toFixed(1) : '0.0';
+    
+    document.getElementById('totalCVEs').textContent = totalCVEs;
+    document.getElementById('avgCVSS').textContent = avgCVSS;
 }
 
 
 async function refreshData() {
-    // Only refresh the pie chart with current metric version
-    await showSeverityDistribution();
+    // Refresh both the pie chart, yearly trends chart, and stats with current metric version
+    await Promise.all([
+        showSeverityDistribution(),
+        showYearlyTrends(),
+        updateStats()
+    ]);
 }
 
 function filterDDoSOnly() {
@@ -153,6 +200,8 @@ async function showSeverityDistribution() {
         }
         
         const dist = data.distribution || {};
+        console.log('Severity distribution data:', dist);
+        console.log('Metric version:', data.metricVersion);
         renderSeverityChart(dist, data.metricVersion);
     } catch (e) {
         console.error('Error fetching severity distribution', e);
@@ -181,7 +230,7 @@ function showChartLoading() {
     
     // Create a simple loading chart
     severityChartInstance = new Chart(ctx, {
-        type: 'doughnut',
+        type: 'pie',
         data: {
             labels: ['Loading...'],
             datasets: [{
@@ -227,7 +276,7 @@ function showChartError(message) {
     
     // Create a simple error chart
     severityChartInstance = new Chart(ctx, {
-        type: 'doughnut',
+        type: 'pie',
         data: {
             labels: ['Error'],
             datasets: [{
@@ -264,6 +313,9 @@ function renderSeverityChart(distribution, metricVersion) {
     const ctx = document.getElementById('severityChart');
     if (!ctx) return;
 
+    console.log('Rendering severity chart with distribution:', distribution);
+    console.log('Labels and data arrays will be built from:', Object.keys(distribution));
+
     const order = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
     const labels = [];
     const data = [];
@@ -274,6 +326,44 @@ function renderSeverityChart(distribution, metricVersion) {
             data.push(distribution[k]);
         }
     });
+
+    console.log('Final labels:', labels);
+    console.log('Final data:', data);
+
+    // If no data, show a message
+    if (labels.length === 0 || data.length === 0) {
+        console.log('No data to display in pie chart');
+        if (severityChartInstance) {
+            severityChartInstance.destroy();
+        }
+        severityChartInstance = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: ['No Data'],
+                datasets: [{
+                    data: [1],
+                    backgroundColor: ['#6c757d'],
+                    borderColor: '#222',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'No severity data available',
+                        color: '#ffffff'
+                    }
+                },
+                layout: { padding: 20 },
+                responsive: true
+            }
+        });
+        return;
+    }
 
     const colors = {
         CRITICAL: '#dc3545',
@@ -327,6 +417,217 @@ function renderSeverityChart(distribution, metricVersion) {
             },
             layout: { padding: 0 },
             responsive: true
+        }
+    });
+}
+
+// Yearly CVE trends chart functions
+let yearlyTrendsChartInstance = null;
+
+// Initialize and render yearly trends chart
+function initYearlyTrendsChart() {
+    // Fetch immediately on load
+    showYearlyTrends();
+}
+
+// Fetch and display yearly CVE trends
+async function showYearlyTrends() {
+    // Show loading state
+    showYearlyTrendsLoading();
+    
+    try {
+        const metricVersion = window.currentMetricVersion || 'latest';
+        const mappedVersion = mapMetricVersion(metricVersion);
+        const response = await fetch(`/api/cves/stats/yearly-trends?metricVersion=${encodeURIComponent(mappedVersion)}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        if (!data.success) {
+            throw new Error(data.error || 'Failed to load yearly CVE trends');
+        }
+        
+        const yearlyData = data.yearlyData || {};
+        renderYearlyTrendsChart(yearlyData, data.metricVersion);
+    } catch (e) {
+        console.error('Error fetching yearly CVE trends', e);
+        showYearlyTrendsError(`Error loading yearly CVE trends: ${e.message}`);
+    }
+}
+
+// Show loading state in the yearly trends chart area
+function showYearlyTrendsLoading() {
+    const ctx = document.getElementById('yearlyTrendsChart');
+    if (!ctx) return;
+    
+    // Clear any existing chart
+    if (yearlyTrendsChartInstance) {
+        yearlyTrendsChartInstance.destroy();
+        yearlyTrendsChartInstance = null;
+    }
+    
+    // Create a simple loading chart
+    yearlyTrendsChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['Loading...'],
+            datasets: [{
+                data: [0],
+                borderColor: '#6c757d',
+                backgroundColor: 'rgba(108, 117, 125, 0.1)',
+                borderWidth: 2,
+                fill: true
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: '🔄 Loading Yearly CVE Trends...',
+                    color: '#ffffff',
+                    font: {
+                        size: 16
+                    }
+                }
+            },
+            layout: { padding: 20 },
+            responsive: true,
+            animation: {
+                duration: 0 // Disable animation for loading state
+            }
+        }
+    });
+}
+
+// Show error state in the yearly trends chart area
+function showYearlyTrendsError(message) {
+    const ctx = document.getElementById('yearlyTrendsChart');
+    if (!ctx) return;
+    
+    // Clear any existing chart
+    if (yearlyTrendsChartInstance) {
+        yearlyTrendsChartInstance.destroy();
+        yearlyTrendsChartInstance = null;
+    }
+    
+    // Create a simple error chart
+    yearlyTrendsChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['Error'],
+            datasets: [{
+                data: [0],
+                borderColor: '#dc3545',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                borderWidth: 2,
+                fill: true
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: `❌ ${message}`,
+                    color: '#dc3545',
+                    font: {
+                        size: 14
+                    }
+                }
+            },
+            layout: { padding: 20 },
+            responsive: true,
+            animation: {
+                duration: 0 // Disable animation for error state
+            }
+        }
+    });
+}
+
+function renderYearlyTrendsChart(yearlyData, metricVersion) {
+    const ctx = document.getElementById('yearlyTrendsChart');
+    if (!ctx) return;
+
+    // Create labels for years 2002-2025
+    const labels = [];
+    const data = [];
+    
+    for (let year = 2002; year <= 2025; year++) {
+        labels.push(year.toString()); // Format as 2002, 2003, etc.
+        data.push(yearlyData[year.toString()] || 0);
+    }
+
+    if (yearlyTrendsChartInstance) {
+        yearlyTrendsChartInstance.destroy();
+    }
+
+    yearlyTrendsChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'CVEs Published',
+                data,
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0,
+                pointBackgroundColor: '#007bff',
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: `CVE Trends by Year (CVSS ${metricVersion}) - All CVEs`,
+                    color: '#ffffff',
+                    font: {
+                        size: 16
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: false
+                    },
+                    ticks: {
+                        color: '#ffffff',
+                        maxTicksLimit: 24, // Show all years from 2002-2025
+                        callback: function(value, index) {
+                            return labels[index]; // Display the year labels
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                },
+                y: {
+                    display: false
+                }
+            },
+            layout: { padding: 10 },
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            }
         }
     });
 }
