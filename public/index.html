@@ -46,7 +46,6 @@
             <div class="controls">
                 <button class="btn btn-success" onclick="refreshData()">🔄 Refresh</button>
                 <button class="btn btn-warning" onclick="filterDDoSOnly()">🛡️ DDoS Only</button>
-                <button class="btn btn-info" onclick="getRandomCVE()">🎲 Random CVE (NVD)</button>
             </div>
 
             <div class="card severity-widget">
@@ -69,17 +68,6 @@
         </div>
     </div>
     
-    
-    <!-- Random CVE Modal -->
-    <div id="randomCveModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeRandomModal()">&times;</span>
-            <h2>🎲 Random CVE from NVD API</h2>
-            <div id="randomCveContent">
-                <div class="loading">Loading random CVE...</div>
-            </div>
-        </div>
-    </div>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/script.js"></script>

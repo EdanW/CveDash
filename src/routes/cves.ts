@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { CVE } from '../types/cve';
-import { NvdWrapper } from '../services/nvd';
 import { getSeveritiesDistribution, getMetricVersionStats, getYearlyCveTrends } from '../queries/getSeveritiesDistribution';
 import { MetricVersion } from '../scripts/extractTableEntriesFromJson';
 
@@ -143,53 +142,6 @@ router.get('/', (req, res) => {
   res.json(cves);
 });
 
-// GET random CVE from NVD API
-router.get('/random/nvd', async (req, res) => {
-  try {
-    const metricVersion = req.query.metricVersion as string;
-    const nvd = new NvdWrapper();
-    
-    // Get recent CVEs (last 30 days) to ensure we get valid CVEs
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const today = new Date();
-    
-    const response = await nvd.getCvesByDateRange(
-      thirtyDaysAgo.toISOString(),
-      today.toISOString()
-    );
-    
-    if (response.vulnerabilities.length === 0) {
-      return res.status(404).json({ error: 'No recent CVEs found' });
-    }
-    
-    // Pick a random CVE from the results
-    const randomIndex = Math.floor(Math.random() * Math.min(response.vulnerabilities.length, 100));
-    const randomVuln = response.vulnerabilities[randomIndex];
-    
-    // Convert to our internal format
-    const internalCve = NvdWrapper.convertToInternalFormat(randomVuln.cve);
-    
-    res.json({
-      success: true,
-      message: 'Random CVE fetched from NVD API',
-      cve: internalCve,
-      metricVersion: metricVersion || 'V31',
-      apiInfo: {
-        totalResults: response.totalResults,
-        resultsPerPage: response.resultsPerPage,
-        timestamp: response.timestamp
-      }
-    });
-    
-  } catch (error: any) {
-    console.error('Error fetching random CVE:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch random CVE from NVD API',
-      details: error.message 
-    });
-  }
-});
 
 // GET single CVE
 router.get('/:id', (req, res) => {
