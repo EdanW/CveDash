@@ -44,14 +44,27 @@
             </div>
             
             <div class="controls">
+                <div class="search-container">
+                    <input type="text" id="cveSearchInput" placeholder="Search CVE ID (e.g., 2009-0041)" class="search-input">
+                    <button class="btn btn-primary" onclick="searchCVE()">🔍 Search</button>
+                </div>
                 <button class="btn btn-success" onclick="refreshData()">🔄 Refresh</button>
                 <button class="btn btn-warning" onclick="filterDDoSOnly()">🛡️ DDoS Only</button>
             </div>
 
-            <div class="card severity-widget">
-                <h3 class="widget-title">📊 Severity Distribution</h3>
-                <div class="widget-canvas-wrap">
-                    <canvas id="severityChart"></canvas>
+            <div class="charts-row">
+                <div class="card severity-widget">
+                    <h3 class="widget-title">📊 Severity Distribution</h3>
+                    <div class="widget-canvas-wrap">
+                        <canvas id="severityChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card search-results-widget" id="searchResultsWidget" style="display: none;">
+                    <h3 class="widget-title">🔍 Search Results</h3>
+                    <div id="searchResultsContent">
+                        <!-- Search results will be displayed here -->
+                    </div>
                 </div>
             </div>
 

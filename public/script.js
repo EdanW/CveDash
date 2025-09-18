@@ -163,7 +163,7 @@ async function refreshData() {
 
 function filterDDoSOnly() {
     showDDoSOnly = !showDDoSOnly;
-    const button = document.querySelector('.btn-warning');
+    const button = document.querySelector('.btn-warning, .btn-info');
     if (showDDoSOnly) {
         button.textContent = '🛡️ Show All';
         button.classList.remove('btn-warning');
@@ -248,7 +248,7 @@ function showChartLoading() {
                 title: {
                     display: true,
                     text: '🔄 Loading Severity Distribution...',
-                    color: '#ffffff',
+                    color: '#000000',
                     font: {
                         size: 16
                     }
@@ -330,8 +330,9 @@ function renderSeverityChart(distribution, metricVersion) {
     console.log('Final labels:', labels);
     console.log('Final data:', data);
 
-    // If no data, show a message
-    if (labels.length === 0 || data.length === 0) {
+    // If no data or all data is zero, show a message
+    const totalData = data.reduce((sum, value) => sum + value, 0);
+    if (labels.length === 0 || data.length === 0 || totalData === 0) {
         console.log('No data to display in pie chart');
         if (severityChartInstance) {
             severityChartInstance.destroy();
@@ -355,7 +356,7 @@ function renderSeverityChart(distribution, metricVersion) {
                     title: {
                         display: true,
                         text: 'No severity data available',
-                        color: '#ffffff'
+                        color: '#000000'
                     }
                 },
                 layout: { padding: 20 },
@@ -395,7 +396,7 @@ function renderSeverityChart(distribution, metricVersion) {
                 legend: {
                     position: 'bottom',
                     labels: {
-                        color: '#ffffff',
+                        color: '#000000',
                         generateLabels: (chart) => {
                             const dataset = chart.data.datasets[0];
                             return chart.data.labels.map((label, i) => ({
@@ -412,7 +413,7 @@ function renderSeverityChart(distribution, metricVersion) {
                 title: {
                     display: true,
                     text: `Severity Distribution (CVSS ${metricVersion})`,
-                    color: '#ffffff'
+                    color: '#000000'
                 }
             },
             layout: { padding: 0 },
@@ -631,6 +632,98 @@ function renderYearlyTrendsChart(yearlyData, metricVersion) {
         }
     });
 }
+
+// CVE Search functionality
+async function searchCVE() {
+    const searchInput = document.getElementById('cveSearchInput');
+    const searchResultsWidget = document.getElementById('searchResultsWidget');
+    const searchResultsContent = document.getElementById('searchResultsContent');
+    
+    const cveId = searchInput.value.trim();
+    
+    if (!cveId) {
+        alert('Please enter a CVE ID to search for');
+        return;
+    }
+    
+    // Show loading state
+    searchResultsWidget.style.display = 'block';
+    searchResultsContent.innerHTML = '<div class="loading">🔍 Searching for CVE...</div>';
+    
+    try {
+        const response = await fetch(`/api/cves/search/${encodeURIComponent(cveId)}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const cve = data.cve;
+            displaySearchResult(cve);
+        } else {
+            searchResultsContent.innerHTML = `
+                <div class="search-result">
+                    <h4>❌ CVE Not Found</h4>
+                    <p>${data.error || 'CVE not found in database'}</p>
+                    <p><strong>Tip:</strong> Make sure you entered the correct CVE ID format (e.g., 2009-0041)</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error searching for CVE:', error);
+        searchResultsContent.innerHTML = `
+            <div class="search-result">
+                <h4>❌ Search Error</h4>
+                <p>Failed to search for CVE. Please try again.</p>
+            </div>
+        `;
+    }
+}
+
+function displaySearchResult(cve) {
+    const searchResultsContent = document.getElementById('searchResultsContent');
+    
+    const severityClass = `severity-${cve.severity.toLowerCase()}`;
+    const statusClass = `status-${cve.status.toLowerCase()}`;
+    
+    searchResultsContent.innerHTML = `
+        <div class="search-result">
+            <h4>${cve.cveId} - ${cve.title}</h4>
+            <div class="cve-description">${cve.description}</div>
+            <div class="cve-info">
+                <strong>Severity:</strong> 
+                <span class="severity-badge ${severityClass}">${cve.severity}</span>
+                <strong>CVSS Score:</strong> 
+                <span class="cvss-score">${cve.cvssScore}</span>
+            </div>
+            <div class="cve-info">
+                <strong>Status:</strong> 
+                <span class="status-badge ${statusClass}">${cve.status}</span>
+                <strong>DDoS Related:</strong> 
+                <span style="color: ${cve.ddosRelated ? '#28a745' : '#dc3545'}; font-weight: bold;">
+                    ${cve.ddosRelated ? 'Yes' : 'No'}
+                </span>
+            </div>
+            <div class="cve-info"><strong>Attack Vector:</strong> ${cve.attackVector}</div>
+            <div class="cve-info"><strong>Published:</strong> ${formatDate(cve.publishedDate)}</div>
+            <div class="cve-info"><strong>Last Modified:</strong> ${formatDate(cve.lastModifiedDate)}</div>
+            <div class="cve-info"><strong>Metric Version:</strong> CVSS ${cve.metricVersion}</div>
+            <div class="references">
+                <strong>References:</strong>
+                ${cve.references.map(ref => `<a href="${ref}" target="_blank">${ref}</a>`).join('')}
+            </div>
+        </div>
+    `;
+}
+
+// Allow Enter key to trigger search
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('cveSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchCVE();
+            }
+        });
+    }
+});
 
 // Metric version toggle with persistence
 function initMetricToggle() {

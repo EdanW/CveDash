@@ -143,7 +143,7 @@ router.get('/', (req, res) => {
 });
 
 
-// GET single CVE
+// GET single CVE by ID
 router.get('/:id', (req, res) => {
   const id = req.params.id;
   const cve = cves.find(c => c.id === id);
@@ -153,6 +153,80 @@ router.get('/:id', (req, res) => {
   }
   
   res.json(cve);
+});
+
+// GET CVE by CVE ID (search functionality)
+router.get('/search/:cveId', async (req, res) => {
+  try {
+    const cveId = req.params.cveId;
+    
+    // Load CVE data from the SQLite database
+    const { CveSqliteManager } = await import('../scripts/saveToSqlite');
+    const manager = new CveSqliteManager('./cve_database.db');
+    
+    // Try different CVE ID formats
+    let entries = await manager.queryEntries({ 
+      id: cveId,
+      limit: 1
+    });
+    
+    // If not found, try with CVE- prefix
+    if (entries.length === 0) {
+      entries = await manager.queryEntries({ 
+        id: `CVE-${cveId}`,
+        limit: 1
+      });
+    }
+    
+    if (entries.length === 0) {
+      // Debug: Let's see what CVE IDs exist in the database
+      const allEntries = await manager.queryEntries({ limit: 10 });
+      const sampleIds = allEntries.map(e => e.id).slice(0, 5);
+      
+      await manager.close();
+      return res.status(404).json({ 
+        success: false, 
+        error: `CVE-${cveId} not found in database`,
+        debug: {
+          searchedFor: [cveId, `CVE-${cveId}`],
+          sampleIds: sampleIds
+        }
+      });
+    }
+    
+    const entry = entries[0];
+    
+    // Transform database entry to frontend format
+    const cveData = {
+      id: entry.id,
+      cveId: entry.id,
+      title: `CVE ${entry.id}`,
+      description: entry.description || 'No description available',
+      severity: entry.baseSeverity || 'UNKNOWN',
+      cvssScore: entry.baseScore || 0,
+      attackVector: entry.attackVector || 'NETWORK',
+      affectedProducts: [], // Not in database schema
+      publishedDate: entry.published || new Date().toISOString().split('T')[0],
+      lastModifiedDate: entry.lastModified || new Date().toISOString().split('T')[0],
+      status: entry.vulnStatus === 'Analyzed' ? 'ACTIVE' : 'INVESTIGATING',
+      ddosRelated: Boolean(entry.isDdosRelated),
+      references: [`https://nvd.nist.gov/vuln/detail/${entry.id}`],
+      metricVersion: entry.metricVersion || '3.1'
+    };
+    
+    await manager.close();
+    res.json({ 
+      success: true, 
+      cve: cveData 
+    });
+    
+  } catch (error) {
+    console.error('Error searching for CVE:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to search for CVE in database' 
+    });
+  }
 });
 
 
