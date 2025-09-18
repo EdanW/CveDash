@@ -3,8 +3,11 @@ Single-function converter: NVD 2.0 CVE (the inner `cve` object) → table schema
 Schema fields:
   id, sourceIdentifier, published, lastModified, vulnStatus, description (lang:en),
   metricVersion (NA/2.0/3.0/3.1/4.0), source, baseScore:number, vectorString, baseSeverity,
-  attackVector, attackComplexity, exploitabilityScore:number, impactScore:number, cweIds (string[])
+  attackVector, attackComplexity, exploitabilityScore:number, impactScore:number, cweIds (string[]),
+  isDdosRelated (boolean)
 */
+
+import { detectDdosRelated } from '../utils/ddosDetection';
 
 export enum MetricVersion {
   NA = '',
@@ -170,7 +173,7 @@ export function buildTableEntryBase(cve: any) {
     vulnStatus: cve?.vulnStatus ?? '',
     description: getEnglishDescription(cve),
     cweIds: getCweIds(cve),
-    isDdosRelated: false,
+    isDdosRelated: detectDdosRelated(cve),
   } as Pick<TableEntry, 'id' | 'sourceIdentifier' | 'published' | 'lastModified' | 'vulnStatus' | 'description' | 'cweIds' | 'isDdosRelated'>;
 }
 
