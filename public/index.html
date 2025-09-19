@@ -27,7 +27,7 @@
             <div class="stats">
                 <div class="stat-card">
                     <h3 id="totalCVEs">0</h3>
-                    <p>Total CVEs</p>
+                    <p id="totalCVEsLabel">DDoS vs Other CVEs</p>
                 </div>
                 <div class="stat-card">
                     <h3 id="criticalCVEs">0</h3>
@@ -44,15 +44,124 @@
             </div>
             
             <div class="controls">
+                <div class="search-container">
+                    <input type="text" id="cveSearchInput" placeholder="Search CVE ID (e.g., 2009-0041)" class="search-input">
+                    <button class="btn btn-primary" onclick="searchCVE()">🔍 Search</button>
+                </div>
                 <button class="btn btn-success" onclick="refreshData()">🔄 Refresh</button>
                 <button class="btn btn-warning" onclick="filterDDoSOnly()">🛡️ DDoS Only</button>
-                <button class="btn btn-info" onclick="getRandomCVE()">🎲 Random CVE (NVD)</button>
             </div>
 
-            <div class="card severity-widget">
-                <h3 class="widget-title">📊 Severity Distribution</h3>
+            <div class="charts-row">
+                <div class="card search-results-widget" id="searchResultsWidget">
+                    <h3 class="widget-title">🔍 Search Results</h3>
+                    <div id="searchResultsContent">
+                        <div class="search-placeholder">
+                            <p>🔍 Look for a CVE</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card severity-widget">
+                    <h3 class="widget-title">📊 Severity Distribution</h3>
+                    <div class="widget-canvas-wrap">
+                        <canvas id="severityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card yearly-trends-widget">
+                <h3 class="widget-title">📈 CVE Trends by Year</h3>
                 <div class="widget-canvas-wrap">
-                    <canvas id="severityChart"></canvas>
+                    <canvas id="yearlyTrendsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="filters-section">
+                <div class="filter-container">
+                    <label for="yearFilter" class="filter-label">Filter by Year:</label>
+                    <select id="yearFilter" class="filter-select">
+                        <option value="all">All Years</option>
+                        <option value="2025">2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                        <option value="2022">2022</option>
+                        <option value="2021">2021</option>
+                        <option value="2020">2020</option>
+                        <option value="2019">2019</option>
+                        <option value="2018">2018</option>
+                        <option value="2017">2017</option>
+                        <option value="2016">2016</option>
+                        <option value="2015">2015</option>
+                        <option value="2014">2014</option>
+                        <option value="2013">2013</option>
+                        <option value="2012">2012</option>
+                        <option value="2011">2011</option>
+                        <option value="2010">2010</option>
+                        <option value="2009">2009</option>
+                        <option value="2008">2008</option>
+                        <option value="2007">2007</option>
+                        <option value="2006">2006</option>
+                        <option value="2005">2005</option>
+                        <option value="2004">2004</option>
+                        <option value="2003">2003</option>
+                        <option value="2002">2002</option>
+                        <option value="2001">2001</option>
+                        <option value="2000">2000</option>
+                        <option value="1999">1999</option>
+                        <option value="1998">1998</option>
+                    </select>
+                </div>
+                <div class="filter-container">
+                    <label for="severityFilter" class="filter-label">Min CVSS Score:</label>
+                    <select id="severityFilter" class="filter-select">
+                        <option value="0">All Scores (0.0+)</option>
+                        <option value="0.5">0.5+</option>
+                        <option value="1.0">1.0+</option>
+                        <option value="1.5">1.5+</option>
+                        <option value="2.0">2.0+</option>
+                        <option value="2.5">2.5+</option>
+                        <option value="3.0">3.0+</option>
+                        <option value="3.5">3.5+</option>
+                        <option value="4.0">4.0+</option>
+                        <option value="4.5">4.5+</option>
+                        <option value="5.0">5.0+</option>
+                        <option value="5.5">5.5+</option>
+                        <option value="6.0">6.0+</option>
+                        <option value="6.5">6.5+</option>
+                        <option value="7.0">7.0+</option>
+                        <option value="7.5">7.5+</option>
+                        <option value="8.0">8.0+</option>
+                        <option value="8.5">8.5+</option>
+                        <option value="9.0">9.0+</option>
+                        <option value="9.5">9.5+</option>
+                        <option value="10.0">10.0 (Critical)</option>
+                    </select>
+                </div>
+                <div class="filter-container">
+                    <label for="severityLevelFilter" class="filter-label">Severity Level:</label>
+                    <div class="severity-checkboxes">
+                        <label class="severity-checkbox">
+                            <input type="checkbox" value="CRITICAL" checked>
+                            <span class="severity-critical">Critical</span>
+                        </label>
+                        <label class="severity-checkbox">
+                            <input type="checkbox" value="HIGH" checked>
+                            <span class="severity-high">High</span>
+                        </label>
+                        <label class="severity-checkbox">
+                            <input type="checkbox" value="MEDIUM" checked>
+                            <span class="severity-medium">Medium</span>
+                        </label>
+                        <label class="severity-checkbox">
+                            <input type="checkbox" value="LOW" checked>
+                            <span class="severity-low">Low</span>
+                        </label>
+                        <label class="severity-checkbox">
+                            <input type="checkbox" value="UNKNOWN" checked>
+                            <span class="severity-unknown">Unknown</span>
+                        </label>
+                    </div>
                 </div>
             </div>
             
@@ -62,17 +171,6 @@
         </div>
     </div>
     
-    
-    <!-- Random CVE Modal -->
-    <div id="randomCveModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeRandomModal()">&times;</span>
-            <h2>🎲 Random CVE from NVD API</h2>
-            <div id="randomCveContent">
-                <div class="loading">Loading random CVE...</div>
-            </div>
-        </div>
-    </div>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/script.js"></script>

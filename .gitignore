@@ -7,7 +7,10 @@ cveJsons/
 
 # Database files
 cve_database.db
+cve_database*.db
 *.db
+*.db.backup*
+*.db.bak
 
 # Build output
 dist/

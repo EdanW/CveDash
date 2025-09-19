@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { CVE } from '../types/cve';
-import { NvdWrapper } from '../services/nvd';
-import { getSeveritiesDistribution } from '../queries/getSeveritiesDistribution';
+import { getSeveritiesDistribution, getMetricVersionStats, getYearlyCveTrends, getYearlyDdosTrends } from '../queries/getSeveritiesDistribution';
 import { MetricVersion } from '../scripts/extractTableEntriesFromJson';
 
 const router = Router();
@@ -143,55 +142,8 @@ router.get('/', (req, res) => {
   res.json(cves);
 });
 
-// GET random CVE from NVD API
-router.get('/random/nvd', async (req, res) => {
-  try {
-    const metricVersion = req.query.metricVersion as string;
-    const nvd = new NvdWrapper();
-    
-    // Get recent CVEs (last 30 days) to ensure we get valid CVEs
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const today = new Date();
-    
-    const response = await nvd.getCvesByDateRange(
-      thirtyDaysAgo.toISOString(),
-      today.toISOString()
-    );
-    
-    if (response.vulnerabilities.length === 0) {
-      return res.status(404).json({ error: 'No recent CVEs found' });
-    }
-    
-    // Pick a random CVE from the results
-    const randomIndex = Math.floor(Math.random() * Math.min(response.vulnerabilities.length, 100));
-    const randomVuln = response.vulnerabilities[randomIndex];
-    
-    // Convert to our internal format
-    const internalCve = NvdWrapper.convertToInternalFormat(randomVuln.cve);
-    
-    res.json({
-      success: true,
-      message: 'Random CVE fetched from NVD API',
-      cve: internalCve,
-      metricVersion: metricVersion || 'V31',
-      apiInfo: {
-        totalResults: response.totalResults,
-        resultsPerPage: response.resultsPerPage,
-        timestamp: response.timestamp
-      }
-    });
-    
-  } catch (error: any) {
-    console.error('Error fetching random CVE:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch random CVE from NVD API',
-      details: error.message 
-    });
-  }
-});
 
-// GET single CVE
+// GET single CVE by ID
 router.get('/:id', (req, res) => {
   const id = req.params.id;
   const cve = cves.find(c => c.id === id);
@@ -203,8 +155,127 @@ router.get('/:id', (req, res) => {
   res.json(cve);
 });
 
+// GET CVE by CVE ID (search functionality)
+router.get('/search/:cveId', async (req, res) => {
+  try {
+    const cveId = req.params.cveId;
+    
+    // Load CVE data from the SQLite database
+    const { CveSqliteManager } = await import('../scripts/saveToSqlite');
+    const manager = new CveSqliteManager('./cve_database.db');
+    
+    // Try different CVE ID formats
+    let entries = await manager.queryEntries({ 
+      id: cveId,
+      limit: 1
+    });
+    
+    // If not found, try with CVE- prefix
+    if (entries.length === 0) {
+      entries = await manager.queryEntries({ 
+        id: `CVE-${cveId}`,
+        limit: 1
+      });
+    }
+    
+    if (entries.length === 0) {
+      // Debug: Let's see what CVE IDs exist in the database
+      const allEntries = await manager.queryEntries({ limit: 10 });
+      const sampleIds = allEntries.map(e => e.id).slice(0, 5);
+      
+      await manager.close();
+      return res.status(404).json({ 
+        success: false, 
+        error: `CVE-${cveId} not found in database`,
+        debug: {
+          searchedFor: [cveId, `CVE-${cveId}`],
+          sampleIds: sampleIds
+        }
+      });
+    }
+    
+    const entry = entries[0];
+    
+    // Transform database entry to frontend format
+    const cveData = {
+      id: entry.id,
+      cveId: entry.id,
+      title: `CVE ${entry.id}`,
+      description: entry.description || 'No description available',
+      severity: entry.baseSeverity || 'UNKNOWN',
+      cvssScore: entry.baseScore || 0,
+      attackVector: entry.attackVector || 'NETWORK',
+      affectedProducts: [], // Not in database schema
+      publishedDate: entry.published || new Date().toISOString().split('T')[0],
+      lastModifiedDate: entry.lastModified || new Date().toISOString().split('T')[0],
+      status: entry.vulnStatus === 'Analyzed' ? 'ACTIVE' : 'INVESTIGATING',
+      ddosRelated: Boolean(entry.isDdosRelated),
+      references: [`https://nvd.nist.gov/vuln/detail/${entry.id}`],
+      metricVersion: entry.metricVersion || '3.1'
+    };
+    
+    await manager.close();
+    res.json({ 
+      success: true, 
+      cve: cveData 
+    });
+    
+  } catch (error) {
+    console.error('Error searching for CVE:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to search for CVE in database' 
+    });
+  }
+});
 
 
+
+
+// GET total CVE count for specific metric version with DDoS ratio
+router.get('/stats/count', async (req, res) => {
+  try {
+    const metricParam = (req.query.metricVersion as string) || '3.1';
+    const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
+    const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
+    
+    // Map database values to MetricVersion enum
+    const versionMapping: Record<string, MetricVersion> = {
+      '2.0': MetricVersion.V20,
+      '3.0': MetricVersion.V30,
+      '3.1': MetricVersion.V31,
+      '4.0': MetricVersion.V40
+    };
+    
+    // Get both DDoS and non-DDoS stats
+    const [ddosStats, nonDdosStats] = await Promise.all([
+      getMetricVersionStats(versionMapping[versionValue], undefined, true), // DDoS-related
+      getMetricVersionStats(versionMapping[versionValue], undefined, false) // Non-DDoS-related
+    ]);
+    
+    const totalCount = ddosStats.totalEntries + nonDdosStats.totalEntries;
+    const ddosCount = ddosStats.totalEntries;
+    const nonDdosCount = nonDdosStats.totalEntries;
+    
+    // Calculate ratio
+    const ddosRatio = totalCount > 0 ? (ddosCount / totalCount * 100).toFixed(1) : '0.0';
+    const nonDdosRatio = totalCount > 0 ? (nonDdosCount / totalCount * 100).toFixed(1) : '0.0';
+    
+    res.json({ 
+      success: true, 
+      metricVersion: versionValue, 
+      totalCount,
+      ddosCount,
+      nonDdosCount,
+      ddosRatio: parseFloat(ddosRatio),
+      nonDdosRatio: parseFloat(nonDdosRatio),
+      averageScore: ddosStats.averageScore // Use DDoS average score
+    });
+  } catch (error: any) {
+    console.error('Error getting CVE count:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to get CVE count' });
+  }
+});
 
 // GET severity distribution from SQLite (defaults to CVSS 3.1)
 router.get('/stats/severity', async (req, res) => {
@@ -226,6 +297,121 @@ router.get('/stats/severity', async (req, res) => {
   } catch (error: any) {
     console.error('Error getting severity distribution:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get severity distribution' });
+  }
+});
+
+// GET yearly CVE trends from SQLite (all CVEs, not just DDoS)
+router.get('/stats/yearly-trends', async (req, res) => {
+  try {
+    const metricParam = (req.query.metricVersion as string) || '3.1';
+    const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
+    const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
+    
+    // Map database values to MetricVersion enum
+    const versionMapping: Record<string, MetricVersion> = {
+      '2.0': MetricVersion.V20,
+      '3.0': MetricVersion.V30,
+      '3.1': MetricVersion.V31,
+      '4.0': MetricVersion.V40
+    };
+    
+    const yearlyData = await getYearlyCveTrends(versionMapping[versionValue]);
+    res.json({ success: true, metricVersion: versionValue, yearlyData });
+  } catch (error: any) {
+    console.error('Error getting yearly CVE trends:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to get yearly CVE trends' });
+  }
+});
+
+// GET yearly DDoS-related CVE trends from SQLite
+router.get('/stats/yearly-ddos-trends', async (req, res) => {
+  try {
+    const metricParam = (req.query.metricVersion as string) || '3.1';
+    const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
+    const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
+    
+    // Map database values to MetricVersion enum
+    const versionMapping: Record<string, MetricVersion> = {
+      '2.0': MetricVersion.V20,
+      '3.0': MetricVersion.V30,
+      '3.1': MetricVersion.V31,
+      '4.0': MetricVersion.V40
+    };
+    
+    const yearlyDdosData = await getYearlyDdosTrends(versionMapping[versionValue]);
+    res.json({ success: true, metricVersion: versionValue, yearlyDdosData });
+  } catch (error: any) {
+    console.error('Error getting yearly DDoS trends:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to get yearly DDoS trends' });
+  }
+});
+
+// GET sample DDoS-related CVEs for display
+router.get('/sample/ddos', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 3;
+    const metricParam = (req.query.metricVersion as string) || '3.1';
+    const yearParam = req.query.year as string;
+    const minScoreParam = req.query.minScore as string;
+    const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
+    const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
+    
+    // Load CVE data from the SQLite database
+    const { CveSqliteManager } = await import('../scripts/saveToSqlite');
+    const manager = new CveSqliteManager('./cve_database.db');
+    
+    // Build query options
+    const queryOptions: any = { 
+      isDdosRelated: true,
+      metricVersion: versionValue,
+      limit: limit
+    };
+    
+    // Add year filter if specified
+    if (yearParam && yearParam !== 'all') {
+      const year = parseInt(yearParam);
+      if (year >= 1998 && year <= 2025) {
+        const startDate = `${year}-01-01`;
+        const endDate = `${year}-12-31`;
+        queryOptions.publishedAfter = startDate;
+        queryOptions.publishedBefore = endDate;
+      }
+    }
+
+    // Add minimum score filter if specified
+    if (minScoreParam && minScoreParam !== '0') {
+      const minScore = parseFloat(minScoreParam);
+      if (minScore >= 0 && minScore <= 10) {
+        queryOptions.minScore = minScore;
+      }
+    }
+    
+    // Get DDoS-related entries from the database with filters
+    const ddosEntries = await manager.queryEntries(queryOptions);
+    
+    // Transform database entries to frontend format
+    const transformedCves = ddosEntries.map(entry => ({
+      id: entry.id,
+      cveId: entry.id,
+      title: `CVE ${entry.id}`,
+      description: entry.description || 'No description available',
+      severity: entry.baseSeverity || 'UNKNOWN',
+      cvssScore: entry.baseScore || 0,
+      attackVector: entry.attackVector || 'NETWORK',
+      affectedProducts: [], // Not in database schema
+      publishedDate: entry.published || new Date().toISOString().split('T')[0],
+      lastModifiedDate: entry.lastModified || new Date().toISOString().split('T')[0],
+      status: entry.vulnStatus === 'Analyzed' ? 'ACTIVE' : 'INVESTIGATING',
+      ddosRelated: Boolean(entry.isDdosRelated),
+      references: [`https://nvd.nist.gov/vuln/detail/${entry.id}`],
+      metricVersion: entry.metricVersion || versionValue
+    }));
+    
+    await manager.close();
+    res.json({ success: true, cves: transformedCves, metricVersion: versionValue });
+  } catch (error) {
+    console.error('Error loading DDoS CVEs from database:', error);
+    res.status(500).json({ success: false, error: 'Failed to load DDoS CVEs from database' });
   }
 });
 
