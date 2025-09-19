@@ -10,7 +10,8 @@ import * as path from 'path';
  */
 export async function getSeveritiesDistribution(
   metricVersion: MetricVersion,
-  dbPath?: string
+  dbPath?: string,
+  statusFilter?: 'accepted' | 'open-accepted' | 'all'
 ): Promise<Record<string, number>> {
   const databasePath = dbPath || path.resolve(process.cwd(), 'cve_database.db');
   const manager = new CveSqliteManager(databasePath);
@@ -19,7 +20,8 @@ export async function getSeveritiesDistribution(
     // Use SQL-level grouping for better performance
     const distribution = await manager.getSeverityDistribution({
       metricVersion: metricVersion,
-      isDdosRelated: true // Get DDoS-related CVEs only
+      isDdosRelated: true, // Get DDoS-related CVEs only
+      statusFilter: statusFilter || 'accepted' // Default to accepted only
     });
 
     return distribution;
@@ -41,7 +43,8 @@ export async function getSeveritiesDistribution(
 export async function getMetricVersionStats(
   metricVersion: MetricVersion,
   dbPath?: string,
-  isDdosRelated?: boolean
+  isDdosRelated?: boolean,
+  statusFilter?: 'accepted' | 'open-accepted' | 'all'
 ): Promise<{
   metricVersion: MetricVersion;
   totalEntries: number;
@@ -55,7 +58,8 @@ export async function getMetricVersionStats(
     // Use SQL-level grouping for severity distribution
     const severityDistribution = await manager.getSeverityDistribution({
       metricVersion: metricVersion,
-      isDdosRelated: isDdosRelated
+      isDdosRelated: isDdosRelated,
+      statusFilter: statusFilter || 'accepted'
     });
 
     // Calculate total entries from the distribution
@@ -73,7 +77,8 @@ export async function getMetricVersionStats(
     // Use SQL-level calculation for average score as well
     const averageScore = await manager.getAverageBaseScore({
       metricVersion: metricVersion,
-      isDdosRelated: isDdosRelated
+      isDdosRelated: isDdosRelated,
+      statusFilter: statusFilter || 'accepted'
     });
 
     return {
@@ -125,14 +130,17 @@ export async function exampleUsage() {
  */
 export async function getYearlyCveTrends(
   metricVersion: MetricVersion,
-  dbPath?: string
+  dbPath?: string,
+  statusFilter?: 'accepted' | 'open-accepted' | 'all'
 ): Promise<Record<string, number>> {
   const databasePath = dbPath || path.resolve(process.cwd(), 'cve_database.db');
   const manager = new CveSqliteManager(databasePath);
 
   try {
     // Use optimized SQL query that handles uniqueness at database level
-    const yearlyDistribution = await manager.getYearlyCveTrends();
+    const yearlyDistribution = await manager.getYearlyCveTrends({
+      statusFilter: statusFilter || 'accepted'
+    });
     return yearlyDistribution;
 
   } catch (error) {
@@ -152,14 +160,17 @@ export async function getYearlyCveTrends(
  */
 export async function getYearlyDdosTrends(
   metricVersion: MetricVersion,
-  dbPath?: string
+  dbPath?: string,
+  statusFilter?: 'accepted' | 'open-accepted' | 'all'
 ): Promise<Record<string, number>> {
   const databasePath = dbPath || path.resolve(process.cwd(), 'cve_database.db');
   const manager = new CveSqliteManager(databasePath);
 
   try {
     // Use optimized SQL query that handles uniqueness at database level
-    const yearlyDistribution = await manager.getYearlyDdosTrends();
+    const yearlyDistribution = await manager.getYearlyDdosTrends({
+      statusFilter: statusFilter || 'accepted'
+    });
     return yearlyDistribution;
 
   } catch (error) {

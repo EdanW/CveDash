@@ -5,6 +5,7 @@ let showDDoSOnly = false;
 let selectedYear = 'all';
 let selectedMinScore = '0';
 let selectedSeverityLevels = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
+let selectedStatusFilter = 'accepted';
 
 // Map frontend metric version values to database values
 function mapMetricVersion(frontendValue) {
@@ -21,6 +22,7 @@ function mapMetricVersion(frontendValue) {
 // Load CVEs on page load
 document.addEventListener('DOMContentLoaded', () => {
     initMetricToggle(); // Initialize metric version first
+    initStatusFilter(); // Initialize status filter
     initYearFilter(); // Initialize year filter
     initSeverityFilter(); // Initialize severity score filter
     initSeverityLevelFilter(); // Initialize severity level filter
@@ -47,7 +49,8 @@ async function loadDDoSCVEs() {
         // Fetch up to 90 DDoS-related CVEs from the database with current metric version and filters
         const yearParam = selectedYear !== 'all' ? `&year=${encodeURIComponent(selectedYear)}` : '';
         const scoreParam = selectedMinScore !== '0' ? `&minScore=${encodeURIComponent(selectedMinScore)}` : '';
-        const response = await fetch(`/api/cves/sample/ddos?limit=90&metricVersion=${encodeURIComponent(mappedVersion)}${yearParam}${scoreParam}`);
+        const statusParam = selectedStatusFilter !== 'accepted' ? `&statusFilter=${encodeURIComponent(selectedStatusFilter)}` : '';
+        const response = await fetch(`/api/cves/sample/ddos?limit=90&metricVersion=${encodeURIComponent(mappedVersion)}${yearParam}${scoreParam}${statusParam}`);
         
         if (response.ok) {
             const data = await response.json();
@@ -281,7 +284,8 @@ async function showSeverityDistribution() {
     try {
         const metricVersion = window.currentMetricVersion || 'latest';
         const mappedVersion = mapMetricVersion(metricVersion);
-        const response = await fetch(`/api/cves/stats/severity?metricVersion=${encodeURIComponent(mappedVersion)}`);
+        const statusParam = selectedStatusFilter !== 'accepted' ? `&statusFilter=${encodeURIComponent(selectedStatusFilter)}` : '';
+        const response = await fetch(`/api/cves/stats/severity?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}`);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -532,11 +536,12 @@ async function showYearlyTrends() {
     try {
         const metricVersion = window.currentMetricVersion || 'latest';
         const mappedVersion = mapMetricVersion(metricVersion);
+        const statusParam = selectedStatusFilter !== 'accepted' ? `&statusFilter=${encodeURIComponent(selectedStatusFilter)}` : '';
         
         // Fetch both all CVEs and DDoS-related CVEs data in parallel
         const [allCvesResponse, ddosCvesResponse] = await Promise.all([
-            fetch(`/api/cves/stats/yearly-trends?metricVersion=${encodeURIComponent(mappedVersion)}`),
-            fetch(`/api/cves/stats/yearly-ddos-trends?metricVersion=${encodeURIComponent(mappedVersion)}`)
+            fetch(`/api/cves/stats/yearly-trends?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}`),
+            fetch(`/api/cves/stats/yearly-ddos-trends?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}`)
         ]);
         
         if (!allCvesResponse.ok) {
@@ -913,6 +918,28 @@ function initMetricToggle() {
         localStorage.setItem('metricVersion', newValue);
         
         // Refetch data with new metric version
+        refreshData();
+    });
+}
+
+// Status filter toggle with persistence
+function initStatusFilter() {
+    const select = document.getElementById('statusFilterSelect');
+    if (!select) return;
+    
+    // Load saved status filter from localStorage
+    const savedStatusFilter = localStorage.getItem('statusFilter') || 'accepted';
+    select.value = savedStatusFilter;
+    selectedStatusFilter = savedStatusFilter;
+    
+    select.addEventListener('change', (e) => {
+        const newValue = e.target.value;
+        selectedStatusFilter = newValue;
+        
+        // Persist the selection
+        localStorage.setItem('statusFilter', newValue);
+        
+        // Refetch data with new status filter
         refreshData();
     });
 }

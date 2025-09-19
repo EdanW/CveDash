@@ -339,8 +339,9 @@ export class CveSqliteManager {
     isDdosRelated?: boolean;
     publishedAfter?: string;
     publishedBefore?: string;
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
   } = {}): Promise<TableEntry[]> {
-    const { limit = 100, offset = 0, severity, minScore, maxScore, id, metricVersion, isDdosRelated, publishedAfter, publishedBefore } = options;
+    const { limit = 100, offset = 0, severity, minScore, maxScore, id, metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
 
     await this.openDatabase();
 
@@ -385,6 +386,15 @@ export class CveSqliteManager {
     if (publishedBefore) {
       whereClause += whereClause ? ' AND published <= ?' : ' WHERE published <= ?';
       params.push(publishedBefore);
+    }
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += whereClause ? ' AND (vulnStatus = ? OR vulnStatus = ?)' : ' WHERE (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += whereClause ? ' AND vulnStatus != ?' : ' WHERE vulnStatus != ?';
+      params.push('Rejected');
     }
 
     const query = `
@@ -497,23 +507,39 @@ export class CveSqliteManager {
    * Get yearly CVE trends with unique CVE counting at SQL level
    * Returns count of unique CVEs per year regardless of metric version
    */
-  async getYearlyCveTrends(): Promise<Record<string, number>> {
+  async getYearlyCveTrends(options: {
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
+  } = {}): Promise<Record<string, number>> {
     await this.openDatabase();
+
+    const { statusFilter } = options;
+    
+    let whereClause = `WHERE published IS NOT NULL
+        AND published != ''
+        AND CAST(strftime('%Y', published) AS INTEGER) BETWEEN 1998 AND 2025`;
+    const params: any[] = [];
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += ' AND (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += ' AND vulnStatus != ?';
+      params.push('Rejected');
+    }
 
     const query = `
       SELECT 
         CAST(strftime('%Y', published) AS TEXT) as year,
         COUNT(DISTINCT SUBSTR(id, 1, CASE WHEN id LIKE 'CVE-%' THEN LENGTH(id) ELSE LENGTH(id) END)) as count
       FROM ${this.tableName}
-      WHERE published IS NOT NULL
-        AND published != ''
-        AND CAST(strftime('%Y', published) AS INTEGER) BETWEEN 1998 AND 2025
+      ${whereClause}
       GROUP BY strftime('%Y', published)
       ORDER BY year
     `;
 
     return new Promise((resolve, reject) => {
-      this.db!.all(query, (err, rows: any[]) => {
+      this.db!.all(query, params, (err, rows: any[]) => {
         if (err) {
           reject(err);
         } else {
@@ -541,24 +567,40 @@ export class CveSqliteManager {
    * Get yearly DDoS CVE trends with unique CVE counting at SQL level
    * Returns count of unique DDoS-related CVEs per year regardless of metric version
    */
-  async getYearlyDdosTrends(): Promise<Record<string, number>> {
+  async getYearlyDdosTrends(options: {
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
+  } = {}): Promise<Record<string, number>> {
     await this.openDatabase();
+
+    const { statusFilter } = options;
+    
+    let whereClause = `WHERE published IS NOT NULL
+        AND published != ''
+        AND isDdosRelated = 1
+        AND CAST(strftime('%Y', published) AS INTEGER) BETWEEN 1998 AND 2025`;
+    const params: any[] = [];
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += ' AND (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += ' AND vulnStatus != ?';
+      params.push('Rejected');
+    }
 
     const query = `
       SELECT 
         CAST(strftime('%Y', published) AS TEXT) as year,
         COUNT(DISTINCT SUBSTR(id, 1, CASE WHEN id LIKE 'CVE-%' THEN LENGTH(id) ELSE LENGTH(id) END)) as count
       FROM ${this.tableName}
-      WHERE published IS NOT NULL
-        AND published != ''
-        AND isDdosRelated = 1
-        AND CAST(strftime('%Y', published) AS INTEGER) BETWEEN 1998 AND 2025
+      ${whereClause}
       GROUP BY strftime('%Y', published)
       ORDER BY year
     `;
 
     return new Promise((resolve, reject) => {
-      this.db!.all(query, (err, rows: any[]) => {
+      this.db!.all(query, params, (err, rows: any[]) => {
         if (err) {
           reject(err);
         } else {
@@ -598,10 +640,11 @@ export class CveSqliteManager {
     isDdosRelated?: boolean;
     publishedAfter?: string;
     publishedBefore?: string;
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
   } = {}): Promise<Record<string, number>> {
     await this.openDatabase();
 
-    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore } = options;
+    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
 
     let whereClause = '';
     const params: any[] = [];
@@ -625,6 +668,18 @@ export class CveSqliteManager {
       whereClause += whereClause ? ' AND published <= ?' : ' WHERE published <= ?';
       params.push(publishedBefore);
     }
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      // Only show Analyzed and Modified status
+      whereClause += whereClause ? ' AND (vulnStatus = ? OR vulnStatus = ?)' : ' WHERE (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      // Show Received, Awaiting Analysis, Undergoing Analysis, Analyzed, and Modified (exclude Rejected)
+      whereClause += whereClause ? ' AND vulnStatus != ?' : ' WHERE vulnStatus != ?';
+      params.push('Rejected');
+    }
+    // 'all' filter doesn't add any WHERE clause - shows everything including rejected
 
     const query = `
       SELECT 
@@ -675,10 +730,11 @@ export class CveSqliteManager {
     isDdosRelated?: boolean;
     publishedAfter?: string;
     publishedBefore?: string;
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
   } = {}): Promise<number> {
     await this.openDatabase();
 
-    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore } = options;
+    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
 
     let whereClause = 'WHERE baseScore IS NOT NULL AND baseScore >= 0';
     const params: any[] = [];
@@ -701,6 +757,15 @@ export class CveSqliteManager {
     if (publishedBefore) {
       whereClause += ' AND published <= ?';
       params.push(publishedBefore);
+    }
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += ' AND (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += ' AND vulnStatus != ?';
+      params.push('Rejected');
     }
 
     const query = `
