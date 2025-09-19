@@ -588,6 +588,144 @@ export class CveSqliteManager {
   async close(): Promise<void> {
     await this.closeDatabase();
   }
+
+  /**
+   * Get severity distribution with SQL-level grouping for better performance
+   * Returns count of entries grouped by severity for a specific metric version
+   */
+  async getSeverityDistribution(options: {
+    metricVersion?: string;
+    isDdosRelated?: boolean;
+    publishedAfter?: string;
+    publishedBefore?: string;
+  } = {}): Promise<Record<string, number>> {
+    await this.openDatabase();
+
+    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore } = options;
+
+    let whereClause = '';
+    const params: any[] = [];
+
+    if (metricVersion) {
+      whereClause += ' WHERE metricVersion = ?';
+      params.push(metricVersion);
+    }
+
+    if (isDdosRelated !== undefined) {
+      whereClause += whereClause ? ' AND isDdosRelated = ?' : ' WHERE isDdosRelated = ?';
+      params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (publishedAfter) {
+      whereClause += whereClause ? ' AND published >= ?' : ' WHERE published >= ?';
+      params.push(publishedAfter);
+    }
+
+    if (publishedBefore) {
+      whereClause += whereClause ? ' AND published <= ?' : ' WHERE published <= ?';
+      params.push(publishedBefore);
+    }
+
+    const query = `
+      SELECT 
+        COALESCE(baseSeverity, 'UNKNOWN') as severity,
+        COUNT(*) as count
+      FROM ${this.tableName}
+      ${whereClause}
+      GROUP BY COALESCE(baseSeverity, 'UNKNOWN')
+      ORDER BY 
+        CASE COALESCE(baseSeverity, 'UNKNOWN')
+          WHEN 'CRITICAL' THEN 1
+          WHEN 'HIGH' THEN 2
+          WHEN 'MEDIUM' THEN 3
+          WHEN 'LOW' THEN 4
+          WHEN 'UNKNOWN' THEN 5
+          ELSE 6
+        END
+    `;
+
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.all(query, params, (err: Error | null, rows: any[]) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const distribution: Record<string, number> = {};
+        rows.forEach(row => {
+          distribution[row.severity] = row.count;
+        });
+
+        resolve(distribution);
+      });
+    });
+  }
+
+  /**
+   * Get average base score with SQL-level calculation for better performance
+   * Returns the average base score for entries matching the given criteria
+   */
+  async getAverageBaseScore(options: {
+    metricVersion?: string;
+    isDdosRelated?: boolean;
+    publishedAfter?: string;
+    publishedBefore?: string;
+  } = {}): Promise<number> {
+    await this.openDatabase();
+
+    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore } = options;
+
+    let whereClause = 'WHERE baseScore IS NOT NULL AND baseScore >= 0';
+    const params: any[] = [];
+
+    if (metricVersion) {
+      whereClause += ' AND metricVersion = ?';
+      params.push(metricVersion);
+    }
+
+    if (isDdosRelated !== undefined) {
+      whereClause += ' AND isDdosRelated = ?';
+      params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (publishedAfter) {
+      whereClause += ' AND published >= ?';
+      params.push(publishedAfter);
+    }
+
+    if (publishedBefore) {
+      whereClause += ' AND published <= ?';
+      params.push(publishedBefore);
+    }
+
+    const query = `
+      SELECT AVG(baseScore) as averageScore
+      FROM ${this.tableName}
+      ${whereClause}
+    `;
+
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.get(query, params, (err: Error | null, row: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const averageScore = row?.averageScore || 0;
+        resolve(Math.round(averageScore * 100) / 100); // Round to 2 decimal places
+      });
+    });
+  }
 }
 
 /**

@@ -16,20 +16,11 @@ export async function getSeveritiesDistribution(
   const manager = new CveSqliteManager(databasePath);
 
   try {
-    // Query entries with the specific metric version and DDoS filter directly from the database
-    const entries = await manager.queryEntries({ 
+    // Use SQL-level grouping for better performance
+    const distribution = await manager.getSeverityDistribution({
       metricVersion: metricVersion,
-      isDdosRelated: true, // Get DDoS-related CVEs only
-      limit: 1000000 // Use a very large limit to get all entries
+      isDdosRelated: true // Get DDoS-related CVEs only
     });
-    
-    // Count severities
-    const distribution: Record<string, number> = {};
-    
-    for (const entry of entries) {
-      const severity = entry.baseSeverity || 'UNKNOWN';
-      distribution[severity] = (distribution[severity] || 0) + 1;
-    }
 
     return distribution;
 
@@ -61,14 +52,16 @@ export async function getMetricVersionStats(
   const manager = new CveSqliteManager(databasePath);
 
   try {
-    // Query entries with the specific metric version and optional DDoS filter directly from the database
-    const entries = await manager.queryEntries({ 
+    // Use SQL-level grouping for severity distribution
+    const severityDistribution = await manager.getSeverityDistribution({
       metricVersion: metricVersion,
-      isDdosRelated: isDdosRelated, // Filter by DDoS-related status if specified
-      limit: 1000000 // Use a very large limit to get all entries
+      isDdosRelated: isDdosRelated
     });
 
-    if (entries.length === 0) {
+    // Calculate total entries from the distribution
+    const totalEntries = Object.values(severityDistribution).reduce((sum, count) => sum + count, 0);
+
+    if (totalEntries === 0) {
       return {
         metricVersion,
         totalEntries: 0,
@@ -77,26 +70,17 @@ export async function getMetricVersionStats(
       };
     }
 
-    // Calculate statistics
-    const severityDistribution: Record<string, number> = {};
-    const scores: number[] = [];
-
-    for (const entry of entries) {
-      const severity = entry.baseSeverity || 'UNKNOWN';
-      severityDistribution[severity] = (severityDistribution[severity] || 0) + 1;
-      
-      if (typeof entry.baseScore === 'number' && entry.baseScore >= 0) {
-        scores.push(entry.baseScore);
-      }
-    }
-
-    const averageScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+    // Use SQL-level calculation for average score as well
+    const averageScore = await manager.getAverageBaseScore({
+      metricVersion: metricVersion,
+      isDdosRelated: isDdosRelated
+    });
 
     return {
       metricVersion,
-      totalEntries: entries.length,
+      totalEntries,
       severityDistribution,
-      averageScore: Math.round(averageScore * 100) / 100 // Round to 2 decimal places
+      averageScore // Already rounded in the SQL method
     };
 
   } catch (error) {
