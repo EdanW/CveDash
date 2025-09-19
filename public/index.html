@@ -53,17 +53,19 @@
             </div>
 
             <div class="charts-row">
+                <div class="card search-results-widget" id="searchResultsWidget">
+                    <h3 class="widget-title">🔍 Search Results</h3>
+                    <div id="searchResultsContent">
+                        <div class="search-placeholder">
+                            <p>🔍 Look for a CVE</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="card severity-widget">
                     <h3 class="widget-title">📊 Severity Distribution</h3>
                     <div class="widget-canvas-wrap">
                         <canvas id="severityChart"></canvas>
-                    </div>
-                </div>
-
-                <div class="card search-results-widget" id="searchResultsWidget" style="display: none;">
-                    <h3 class="widget-title">🔍 Search Results</h3>
-                    <div id="searchResultsContent">
-                        <!-- Search results will be displayed here -->
                     </div>
                 </div>
             </div>
@@ -135,6 +137,31 @@
                         <option value="9.5">9.5+</option>
                         <option value="10.0">10.0 (Critical)</option>
                     </select>
+                </div>
+                <div class="filter-container">
+                    <label for="severityLevelFilter" class="filter-label">Severity Level:</label>
+                    <div class="severity-checkboxes">
+                        <label class="severity-checkbox">
+                            <input type="checkbox" value="CRITICAL" checked>
+                            <span class="severity-critical">Critical</span>
+                        </label>
+                        <label class="severity-checkbox">
+                            <input type="checkbox" value="HIGH" checked>
+                            <span class="severity-high">High</span>
+                        </label>
+                        <label class="severity-checkbox">
+                            <input type="checkbox" value="MEDIUM" checked>
+                            <span class="severity-medium">Medium</span>
+                        </label>
+                        <label class="severity-checkbox">
+                            <input type="checkbox" value="LOW" checked>
+                            <span class="severity-low">Low</span>
+                        </label>
+                        <label class="severity-checkbox">
+                            <input type="checkbox" value="UNKNOWN" checked>
+                            <span class="severity-unknown">Unknown</span>
+                        </label>
+                    </div>
                 </div>
             </div>
             

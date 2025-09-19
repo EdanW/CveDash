@@ -4,6 +4,7 @@ let displayedCount = 3;
 let showDDoSOnly = false;
 let selectedYear = 'all';
 let selectedMinScore = '0';
+let selectedSeverityLevels = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 
 // Map frontend metric version values to database values
 function mapMetricVersion(frontendValue) {
@@ -22,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initMetricToggle(); // Initialize metric version first
     initYearFilter(); // Initialize year filter
     initSeverityFilter(); // Initialize severity score filter
+    initSeverityLevelFilter(); // Initialize severity level filter
     loadCVEsOnce();
     initSeverityChart();
     initYearlyTrendsChart();
@@ -112,7 +114,10 @@ function displayCVEs() {
     const container = document.getElementById('cvesContainer');
     container.innerHTML = '';
     
-    const filteredCVEs = showDDoSOnly ? cves.filter(cve => cve.ddosRelated) : cves;
+    let filteredCVEs = showDDoSOnly ? cves.filter(cve => cve.ddosRelated) : cves;
+    
+    // Apply severity level filter
+    filteredCVEs = filteredCVEs.filter(cve => selectedSeverityLevels.includes(cve.severity));
     
     filteredCVEs.forEach(cve => {
         const card = document.createElement('div');
@@ -147,8 +152,12 @@ function displayCVEs() {
     });
     
     // Add "Show More" button if there are more CVEs to display
-    console.log('Debug - allDDoSCVEs.length:', allDDoSCVEs.length, 'displayedCount:', displayedCount);
-    if (allDDoSCVEs.length > displayedCount) {
+    const allFilteredCVEs = showDDoSOnly ? 
+        allDDoSCVEs.filter(cve => cve.ddosRelated && selectedSeverityLevels.includes(cve.severity)) :
+        allDDoSCVEs.filter(cve => selectedSeverityLevels.includes(cve.severity));
+    
+    console.log('Debug - allFilteredCVEs.length:', allFilteredCVEs.length, 'displayedCount:', displayedCount);
+    if (allFilteredCVEs.length > displayedCount) {
         console.log('Adding Show More button');
         const showMoreBtn = document.createElement('div');
         showMoreBtn.className = 'show-more-container';
@@ -166,8 +175,14 @@ function displayCVEs() {
 // Show more CVEs function
 function showMoreCVEs() {
     const increment = 3; // Show 3 more at a time
-    displayedCount = Math.min(displayedCount + increment, allDDoSCVEs.length);
-    cves = allDDoSCVEs.slice(0, displayedCount);
+    
+    // Get all filtered CVEs based on current filters
+    const allFilteredCVEs = showDDoSOnly ? 
+        allDDoSCVEs.filter(cve => cve.ddosRelated && selectedSeverityLevels.includes(cve.severity)) :
+        allDDoSCVEs.filter(cve => selectedSeverityLevels.includes(cve.severity));
+    
+    displayedCount = Math.min(displayedCount + increment, allFilteredCVEs.length);
+    cves = allFilteredCVEs.slice(0, displayedCount);
     displayCVEs();
 }
 
@@ -248,6 +263,9 @@ function filterDDoSOnly() {
         button.classList.remove('btn-info');
         button.classList.add('btn-warning');
     }
+    
+    // Reset displayed count when filter changes
+    displayedCount = 3;
     displayCVEs();
 }
 
@@ -765,7 +783,6 @@ async function searchCVE() {
     }
     
     // Show loading state
-    searchResultsWidget.style.display = 'block';
     searchResultsContent.innerHTML = '<div class="loading">🔍 Searching for CVE...</div>';
     
     try {
@@ -849,13 +866,30 @@ function displaySearchResult(cve) {
     `;
 }
 
-// Allow Enter key to trigger search
+// Clear search results and show placeholder
+function clearSearchResults() {
+    const searchResultsContent = document.getElementById('searchResultsContent');
+    searchResultsContent.innerHTML = `
+        <div class="search-placeholder">
+            <p>🔍 Look for a CVE</p>
+        </div>
+    `;
+}
+
+// Allow Enter key to trigger search and clear results when input is empty
 document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('cveSearchInput');
     if (searchInput) {
         searchInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 searchCVE();
+            }
+        });
+        
+        // Clear search results when input is empty
+        searchInput.addEventListener('input', function(e) {
+            if (e.target.value.trim() === '') {
+                clearSearchResults();
             }
         });
     }
@@ -924,6 +958,46 @@ function initSeverityFilter() {
         
         // Refetch data with new severity filter
         refreshData();
+    });
+}
+
+// Severity level filter initialization
+function initSeverityLevelFilter() {
+    const checkboxes = document.querySelectorAll('.severity-checkbox input[type="checkbox"]');
+    if (!checkboxes.length) return;
+    
+    // Load saved severity levels from localStorage
+    const savedSeverityLevels = localStorage.getItem('selectedSeverityLevels');
+    if (savedSeverityLevels) {
+        selectedSeverityLevels = JSON.parse(savedSeverityLevels);
+    }
+    
+    // Set initial checkbox states
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectedSeverityLevels.includes(checkbox.value);
+    });
+    
+    // Add event listeners
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const severity = e.target.value;
+            if (e.target.checked) {
+                if (!selectedSeverityLevels.includes(severity)) {
+                    selectedSeverityLevels.push(severity);
+                }
+            } else {
+                selectedSeverityLevels = selectedSeverityLevels.filter(s => s !== severity);
+            }
+            
+            // Persist the selection
+            localStorage.setItem('selectedSeverityLevels', JSON.stringify(selectedSeverityLevels));
+            
+            // Reset displayed count when filter changes
+            displayedCount = 3;
+            
+            // Update display with new filter
+            displayCVEs();
+        });
     });
 }
 
