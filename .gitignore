@@ -9,7 +9,7 @@ cveJsons/
 cve_database.db
 cve_database*.db
 *.db
-*.db.backup
+*.db.backup*
 *.db.bak
 
 # Build output
