@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { CVE } from '../types/cve';
 import { getSeveritiesDistribution, getMetricVersionStats, getYearlyCveTrends, getYearlyDdosTrends } from '../queries/getSeveritiesDistribution';
+import { getCweStatistics } from '../queries/getCweStatistics';
 import { MetricVersion } from '../scripts/extractTableEntriesFromJson';
 
 const router = Router();
@@ -428,6 +429,48 @@ router.get('/sample/ddos', async (req, res) => {
   } catch (error) {
     console.error('Error loading DDoS CVEs from database:', error);
     res.status(500).json({ success: false, error: 'Failed to load DDoS CVEs from database' });
+  }
+});
+
+// GET CWE statistics for DDoS-related entries
+router.get('/stats/cwe', async (req, res) => {
+  try {
+    const metricParam = (req.query.metricVersion as string) || '3.1';
+    const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
+    const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
+    
+    const statusParam = (req.query.statusFilter as string) || 'accepted';
+    const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
+    const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
+    
+    const limitParam = parseInt(req.query.limit as string) || 5;
+    const limit = Math.min(Math.max(limitParam, 1), 20); // Limit between 1 and 20
+    
+    // Map database values to MetricVersion enum
+    const versionMapping: Record<string, MetricVersion> = {
+      '2.0': MetricVersion.V20,
+      '3.0': MetricVersion.V30,
+      '3.1': MetricVersion.V31,
+      '4.0': MetricVersion.V40
+    };
+    
+    const cweStats = await getCweStatistics(
+      versionMapping[versionValue], 
+      undefined, 
+      statusValue, 
+      limit
+    );
+    
+    res.json({ 
+      success: true, 
+      metricVersion: versionValue, 
+      statusFilter: statusValue,
+      limit: limit,
+      cweStats 
+    });
+  } catch (error: any) {
+    console.error('Error getting CWE statistics:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to get CWE statistics' });
   }
 });
 
