@@ -1,5 +1,9 @@
 let cves = [];
+let allDDoSCVEs = [];
+let displayedCount = 3;
 let showDDoSOnly = false;
+let selectedYear = 'all';
+let selectedMinScore = '0';
 
 // Map frontend metric version values to database values
 function mapMetricVersion(frontendValue) {
@@ -15,41 +19,87 @@ function mapMetricVersion(frontendValue) {
 
 // Load CVEs on page load
 document.addEventListener('DOMContentLoaded', () => {
+    initMetricToggle(); // Initialize metric version first
+    initYearFilter(); // Initialize year filter
+    initSeverityFilter(); // Initialize severity score filter
     loadCVEsOnce();
     initSeverityChart();
     initYearlyTrendsChart();
-    initMetricToggle();
 });
 
-// Load CVEs once on page load from static data
+// Load CVEs once on page load from database
 async function loadCVEsOnce() {
+    // Ensure metric version is initialized before loading CVEs
+    if (!window.currentMetricVersion) {
+        window.currentMetricVersion = localStorage.getItem('metricVersion') || 'latest';
+    }
+    await loadDDoSCVEs();
+}
+
+// Load DDoS CVEs with current metric version
+async function loadDDoSCVEs() {
     try {
-        // For now, use a small sample dataset instead of loading everything
-        // This avoids the massive API call and database query
-        cves = [
-            {
-                id: '1',
-                cveId: 'CVE-2023-1234',
-                title: 'Sample CVE for Testing',
-                description: 'This is a sample CVE entry for testing the dashboard.',
-                severity: 'HIGH',
-                cvssScore: 8.5,
-                attackVector: 'NETWORK',
-                affectedProducts: ['Sample Product v1.0'],
-                publishedDate: '2023-01-15',
-                lastModifiedDate: '2023-01-20',
-                status: 'ACTIVE',
-                ddosRelated: true,
-                references: ['https://nvd.nist.gov/vuln/detail/CVE-2023-1234']
-            }
-        ];
+        const metricVersion = window.currentMetricVersion || 'latest';
+        const mappedVersion = mapMetricVersion(metricVersion);
         
-        displayCVEs();
-        updateStats();
+        // Fetch up to 90 DDoS-related CVEs from the database with current metric version and filters
+        const yearParam = selectedYear !== 'all' ? `&year=${encodeURIComponent(selectedYear)}` : '';
+        const scoreParam = selectedMinScore !== '0' ? `&minScore=${encodeURIComponent(selectedMinScore)}` : '';
+        const response = await fetch(`/api/cves/sample/ddos?limit=90&metricVersion=${encodeURIComponent(mappedVersion)}${yearParam}${scoreParam}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                allDDoSCVEs = data.cves;
+                displayedCount = 3; // Reset to show 3 initially
+                cves = allDDoSCVEs.slice(0, displayedCount);
+            } else {
+                console.error('Failed to load DDoS CVEs:', data.error);
+                // Fallback to sample data if API fails
+                allDDoSCVEs = getFallbackCVEs();
+                cves = allDDoSCVEs;
+            }
+        } else {
+            console.error('HTTP error loading DDoS CVEs:', response.status);
+            // Fallback to sample data if API fails
+            allDDoSCVEs = getFallbackCVEs();
+            cves = allDDoSCVEs;
+        }
+        
+        // Always call displayCVEs after data is loaded to show the button
+        setTimeout(() => {
+            displayCVEs();
+            updateStats();
+        }, 100);
     } catch (error) {
         console.error('Error loading CVEs:', error);
-        alert(`Error loading CVE data: ${error.message}`);
+        // Fallback to sample data if everything fails
+        allDDoSCVEs = getFallbackCVEs();
+        cves = allDDoSCVEs;
+        displayCVEs();
+        updateStats();
     }
+}
+
+// Get fallback CVE data
+function getFallbackCVEs() {
+    return [
+        {
+            id: '1',
+            cveId: 'CVE-2023-1234',
+            title: 'Sample DDoS CVE for Testing',
+            description: 'This is a sample DDoS-related CVE entry for testing the dashboard.',
+            severity: 'HIGH',
+            cvssScore: 8.5,
+            attackVector: 'NETWORK',
+            affectedProducts: ['Sample Product v1.0'],
+            publishedDate: '2023-01-15',
+            lastModifiedDate: '2023-01-20',
+            status: 'ACTIVE',
+            ddosRelated: true,
+            references: ['https://nvd.nist.gov/vuln/detail/CVE-2023-1234']
+        }
+    ];
 }
 
 // Legacy function - now just updates display with current data
@@ -75,7 +125,7 @@ function displayCVEs() {
             <div class="severity-badge ${severityClass}">
                 ${cve.severity}
             </div>
-            <h3>${cve.cveId} - ${cve.title}</h3>
+            <h3>${cve.cveId}</h3>
             <div class="cve-description">${cve.description}</div>
             <div class="cve-info">
                 <strong>CVSS Score:</strong> 
@@ -86,15 +136,39 @@ function displayCVEs() {
             <div class="cve-info"><strong>Published:</strong> ${formatDate(cve.publishedDate)}</div>
             <div class="cve-info"><strong>Last Modified:</strong> ${formatDate(cve.lastModifiedDate)}</div>
             <div class="affected-products">
-                <strong>Affected Products:</strong> ${cve.affectedProducts.join(', ')}
+                <strong>Affected Products:</strong> ${cve.affectedProducts.length > 0 ? cve.affectedProducts.join(', ') : 'Not specified'}
             </div>
             <div class="references">
                 <strong>References:</strong>
-                ${cve.references.map(ref => `<a href="${ref}" target="_blank">${ref}</a>`).join('')}
+                ${cve.references.map(ref => `<a href="${ref}" target="_blank">View Details</a>`).join('')}
             </div>
         `;
         container.appendChild(card);
     });
+    
+    // Add "Show More" button if there are more CVEs to display
+    console.log('Debug - allDDoSCVEs.length:', allDDoSCVEs.length, 'displayedCount:', displayedCount);
+    if (allDDoSCVEs.length > displayedCount) {
+        console.log('Adding Show More button');
+        const showMoreBtn = document.createElement('div');
+        showMoreBtn.className = 'show-more-container';
+        showMoreBtn.innerHTML = `
+            <button class="btn btn-primary show-more-btn" onclick="showMoreCVEs()">
+                📄 Show More
+            </button>
+        `;
+        container.appendChild(showMoreBtn);
+    } else {
+        console.log('Not adding Show More button - no more CVEs to show');
+    }
+}
+
+// Show more CVEs function
+function showMoreCVEs() {
+    const increment = 3; // Show 3 more at a time
+    displayedCount = Math.min(displayedCount + increment, allDDoSCVEs.length);
+    cves = allDDoSCVEs.slice(0, displayedCount);
+    displayCVEs();
 }
 
 async function updateStats() {
@@ -153,11 +227,12 @@ function updateStatsFromLocalData() {
 
 
 async function refreshData() {
-    // Refresh both the pie chart, yearly trends chart, and stats with current metric version
+    // Refresh the pie chart, yearly trends chart, stats, and DDoS CVEs with current metric version
     await Promise.all([
         showSeverityDistribution(),
         showYearlyTrends(),
-        updateStats()
+        updateStats(),
+        loadDDoSCVEs()
     ]);
 }
 
@@ -439,19 +514,35 @@ async function showYearlyTrends() {
     try {
         const metricVersion = window.currentMetricVersion || 'latest';
         const mappedVersion = mapMetricVersion(metricVersion);
-        const response = await fetch(`/api/cves/stats/yearly-trends?metricVersion=${encodeURIComponent(mappedVersion)}`);
         
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Fetch both all CVEs and DDoS-related CVEs data in parallel
+        const [allCvesResponse, ddosCvesResponse] = await Promise.all([
+            fetch(`/api/cves/stats/yearly-trends?metricVersion=${encodeURIComponent(mappedVersion)}`),
+            fetch(`/api/cves/stats/yearly-ddos-trends?metricVersion=${encodeURIComponent(mappedVersion)}`)
+        ]);
+        
+        if (!allCvesResponse.ok) {
+            throw new Error(`HTTP ${allCvesResponse.status}: ${allCvesResponse.statusText}`);
         }
         
-        const data = await response.json();
-        if (!data.success) {
-            throw new Error(data.error || 'Failed to load yearly CVE trends');
+        if (!ddosCvesResponse.ok) {
+            throw new Error(`HTTP ${ddosCvesResponse.status}: ${ddosCvesResponse.statusText}`);
         }
         
-        const yearlyData = data.yearlyData || {};
-        renderYearlyTrendsChart(yearlyData, data.metricVersion);
+        const allCvesData = await allCvesResponse.json();
+        const ddosCvesData = await ddosCvesResponse.json();
+        
+        if (!allCvesData.success) {
+            throw new Error(allCvesData.error || 'Failed to load yearly CVE trends');
+        }
+        
+        if (!ddosCvesData.success) {
+            throw new Error(ddosCvesData.error || 'Failed to load yearly DDoS trends');
+        }
+        
+        const yearlyData = allCvesData.yearlyData || {};
+        const yearlyDdosData = ddosCvesData.yearlyDdosData || {};
+        renderYearlyTrendsChart(yearlyData, yearlyDdosData, allCvesData.metricVersion);
     } catch (e) {
         console.error('Error fetching yearly CVE trends', e);
         showYearlyTrendsError(`Error loading yearly CVE trends: ${e.message}`);
@@ -552,17 +643,19 @@ function showYearlyTrendsError(message) {
     });
 }
 
-function renderYearlyTrendsChart(yearlyData, metricVersion) {
+function renderYearlyTrendsChart(yearlyData, yearlyDdosData, metricVersion) {
     const ctx = document.getElementById('yearlyTrendsChart');
     if (!ctx) return;
 
-    // Create labels for years 2002-2025
+    // Create labels for years 1998-2025
     const labels = [];
-    const data = [];
+    const allCvesData = [];
+    const ddosCvesData = [];
     
-    for (let year = 2002; year <= 2025; year++) {
-        labels.push(year.toString()); // Format as 2002, 2003, etc.
-        data.push(yearlyData[year.toString()] || 0);
+    for (let year = 1998; year <= 2025; year++) {
+        labels.push(year.toString()); // Format as 1998, 1999, etc.
+        allCvesData.push(yearlyData[year.toString()] || 0);
+        ddosCvesData.push(yearlyDdosData[year.toString()] || 0);
     }
 
     if (yearlyTrendsChartInstance) {
@@ -573,29 +666,54 @@ function renderYearlyTrendsChart(yearlyData, metricVersion) {
         type: 'line',
         data: {
             labels,
-            datasets: [{
-                label: 'CVEs Published',
-                data,
-                borderColor: '#007bff',
-                backgroundColor: 'rgba(0, 123, 255, 0.1)',
-                borderWidth: 3,
-                fill: true,
-                tension: 0,
-                pointBackgroundColor: '#007bff',
-                pointBorderColor: '#ffffff',
-                pointBorderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 6
-            }]
+            datasets: [
+                {
+                    label: 'All CVEs',
+                    data: allCvesData,
+                    borderColor: '#007bff',
+                    backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                    borderWidth: 3,
+                    fill: false,
+                    tension: 0,
+                    pointBackgroundColor: '#007bff',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                },
+                {
+                    label: 'DDoS Related CVEs',
+                    data: ddosCvesData,
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    borderWidth: 3,
+                    fill: false,
+                    tension: 0,
+                    pointBackgroundColor: '#dc3545',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }
+            ]
         },
         options: {
             plugins: {
                 legend: {
-                    display: false
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        color: '#000000',
+                        usePointStyle: true,
+                        padding: 20,
+                        font: {
+                            size: 14
+                        }
+                    }
                 },
                 title: {
                     display: true,
-                    text: `CVE Trends by Year (CVSS ${metricVersion}) - All CVEs`,
+                    text: `CVE Trends by Year (CVSS ${metricVersion})`,
                     color: '#ffffff',
                     font: {
                         size: 16
@@ -609,7 +727,7 @@ function renderYearlyTrendsChart(yearlyData, metricVersion) {
                     },
                     ticks: {
                         color: '#ffffff',
-                        maxTicksLimit: 24, // Show all years from 2002-2025
+                        maxTicksLimit: 28, // Show all years from 1998-2025
                         callback: function(value, index) {
                             return labels[index]; // Display the year labels
                         }
@@ -680,6 +798,24 @@ async function searchCVE() {
 function displaySearchResult(cve) {
     const searchResultsContent = document.getElementById('searchResultsContent');
     
+    // Check if DDoS filter is active and CVE is not DDoS-related
+    if (showDDoSOnly && !cve.ddosRelated) {
+        searchResultsContent.innerHTML = `
+            <div class="search-result">
+                <h4>🔍 CVE Found but Filtered Out</h4>
+                <p><strong>${cve.cveId}</strong> was found in the database but is not displayed because:</p>
+                <ul>
+                    <li>DDoS filter is currently active (🛡️ DDoS Only mode)</li>
+                    <li>This CVE is not DDoS-related</li>
+                </ul>
+                <p><strong>DDoS Related:</strong> 
+                <span style="color: #dc3545; font-weight: bold;">No</span></p>
+                <p><em>Switch to "Show All" mode to view this CVE, or search for a DDoS-related CVE.</em></p>
+            </div>
+        `;
+        return;
+    }
+    
     const severityClass = `severity-${cve.severity.toLowerCase()}`;
     const statusClass = `status-${cve.status.toLowerCase()}`;
     
@@ -743,6 +879,50 @@ function initMetricToggle() {
         localStorage.setItem('metricVersion', newValue);
         
         // Refetch data with new metric version
+        refreshData();
+    });
+}
+
+// Year filter initialization
+function initYearFilter() {
+    const select = document.getElementById('yearFilter');
+    if (!select) return;
+    
+    // Load saved year from localStorage
+    const savedYear = localStorage.getItem('selectedYear') || 'all';
+    select.value = savedYear;
+    selectedYear = savedYear;
+    
+    select.addEventListener('change', (e) => {
+        const newValue = e.target.value;
+        selectedYear = newValue;
+        
+        // Persist the selection
+        localStorage.setItem('selectedYear', newValue);
+        
+        // Refetch data with new year filter
+        refreshData();
+    });
+}
+
+// Severity score filter initialization
+function initSeverityFilter() {
+    const select = document.getElementById('severityFilter');
+    if (!select) return;
+    
+    // Load saved min score from localStorage
+    const savedMinScore = localStorage.getItem('selectedMinScore') || '0';
+    select.value = savedMinScore;
+    selectedMinScore = savedMinScore;
+    
+    select.addEventListener('change', (e) => {
+        const newValue = e.target.value;
+        selectedMinScore = newValue;
+        
+        // Persist the selection
+        localStorage.setItem('selectedMinScore', newValue);
+        
+        // Refetch data with new severity filter
         refreshData();
     });
 }

@@ -187,6 +187,62 @@ export async function getYearlyCveTrends(
   }
 }
 
+/**
+ * Gets yearly DDoS-related CVE distribution for a specific metric version
+ * @param metricVersion - The CVSS metric version to filter by
+ * @param dbPath - Optional path to the database file (defaults to cve_database.db)
+ * @returns Promise<Record<string, number>> - Object with year as key and count as value
+ */
+export async function getYearlyDdosTrends(
+  metricVersion: MetricVersion,
+  dbPath?: string
+): Promise<Record<string, number>> {
+  const databasePath = dbPath || path.resolve(process.cwd(), 'cve_database.db');
+  const manager = new CveSqliteManager(databasePath);
+
+  try {
+    // Query entries with the specific metric version and DDoS filter
+    const entries = await manager.queryEntries({ 
+      metricVersion: metricVersion,
+      isDdosRelated: true, // Only DDoS-related CVEs
+      limit: 1000000 // Use a very large limit to get all entries
+    });
+    
+    // Count DDoS CVEs by year (2002-2025)
+    const yearlyDistribution: Record<string, number> = {};
+    
+    // Initialize all years from 2002 to 2025 with 0
+    for (let year = 2002; year <= 2025; year++) {
+      yearlyDistribution[year.toString()] = 0;
+    }
+    
+    for (const entry of entries) {
+      if (entry.published) {
+        try {
+          const publishedDate = new Date(entry.published);
+          const year = publishedDate.getFullYear().toString();
+          
+          // Only count years in our range
+          if (yearlyDistribution.hasOwnProperty(year)) {
+            yearlyDistribution[year] = (yearlyDistribution[year] || 0) + 1;
+          }
+        } catch (error) {
+          // Skip entries with invalid dates
+          console.warn(`Invalid date format for entry ${entry.id}: ${entry.published}`);
+        }
+      }
+    }
+
+    return yearlyDistribution;
+
+  } catch (error) {
+    console.error('Error getting yearly DDoS trends:', error);
+    throw error;
+  } finally {
+    await manager.close();
+  }
+}
+
 // Run example if this file is executed directly
 if (require.main === module) {
   exampleUsage().catch(console.error);
