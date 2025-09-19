@@ -494,6 +494,95 @@ export class CveSqliteManager {
   }
 
   /**
+   * Get yearly CVE trends with unique CVE counting at SQL level
+   * Returns count of unique CVEs per year regardless of metric version
+   */
+  async getYearlyCveTrends(): Promise<Record<string, number>> {
+    await this.openDatabase();
+
+    const query = `
+      SELECT 
+        CAST(strftime('%Y', published) AS TEXT) as year,
+        COUNT(DISTINCT SUBSTR(id, 1, CASE WHEN id LIKE 'CVE-%' THEN LENGTH(id) ELSE LENGTH(id) END)) as count
+      FROM ${this.tableName}
+      WHERE published IS NOT NULL
+        AND published != ''
+        AND CAST(strftime('%Y', published) AS INTEGER) BETWEEN 1998 AND 2025
+      GROUP BY strftime('%Y', published)
+      ORDER BY year
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db!.all(query, (err, rows: any[]) => {
+        if (err) {
+          reject(err);
+        } else {
+          const yearlyData: Record<string, number> = {};
+          
+          // Initialize all years 1998-2025 with 0
+          for (let year = 1998; year <= 2025; year++) {
+            yearlyData[year.toString()] = 0;
+          }
+          
+          // Fill in actual data
+          rows.forEach(row => {
+            if (row.year) {
+              yearlyData[row.year] = row.count || 0;
+            }
+          });
+          
+          resolve(yearlyData);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get yearly DDoS CVE trends with unique CVE counting at SQL level
+   * Returns count of unique DDoS-related CVEs per year regardless of metric version
+   */
+  async getYearlyDdosTrends(): Promise<Record<string, number>> {
+    await this.openDatabase();
+
+    const query = `
+      SELECT 
+        CAST(strftime('%Y', published) AS TEXT) as year,
+        COUNT(DISTINCT SUBSTR(id, 1, CASE WHEN id LIKE 'CVE-%' THEN LENGTH(id) ELSE LENGTH(id) END)) as count
+      FROM ${this.tableName}
+      WHERE published IS NOT NULL
+        AND published != ''
+        AND isDdosRelated = 1
+        AND CAST(strftime('%Y', published) AS INTEGER) BETWEEN 1998 AND 2025
+      GROUP BY strftime('%Y', published)
+      ORDER BY year
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db!.all(query, (err, rows: any[]) => {
+        if (err) {
+          reject(err);
+        } else {
+          const yearlyData: Record<string, number> = {};
+          
+          // Initialize all years 1998-2025 with 0
+          for (let year = 1998; year <= 2025; year++) {
+            yearlyData[year.toString()] = 0;
+          }
+          
+          // Fill in actual data
+          rows.forEach(row => {
+            if (row.year) {
+              yearlyData[row.year] = row.count || 0;
+            }
+          });
+          
+          resolve(yearlyData);
+        }
+      });
+    });
+  }
+
+  /**
    * Close the database connection (call this when done)
    */
   async close(): Promise<void> {
