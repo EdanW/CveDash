@@ -24,6 +24,14 @@ body {
     position: absolute;
     top: 12px;
     left: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.header-controls-left {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -145,6 +153,29 @@ body {
 .btn-danger:hover {
     background: #fa5252;
     transform: translateY(-2px);
+}
+
+.btn-refresh {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 8px 12px;
+    font-size: 16px;
+    border-radius: 6px;
+    backdrop-filter: blur(2px);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    min-width: 40px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-refresh:hover {
+    background: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-1px);
 }
 
 .form-group {
