@@ -522,4 +522,60 @@ router.get('/stats/cvss-distribution', async (req, res) => {
   }
 });
 
+// GET CVSS box plot data for all metric versions
+router.get('/stats/cvss-boxplot', async (req, res) => {
+  try {
+    const statusParam = (req.query.statusFilter as string) || 'accepted';
+    const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
+    const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
+    
+    const ddosOnlyParam = req.query.ddosOnly as string;
+    const isDdosRelated = ddosOnlyParam === 'true' ? true : undefined; // Show all by default, filter to DDoS only if requested
+    
+    // Map database values to MetricVersion enum
+    const versionMapping: Record<string, MetricVersion> = {
+      '2.0': MetricVersion.V20,
+      '3.0': MetricVersion.V30,
+      '3.1': MetricVersion.V31,
+      '4.0': MetricVersion.V40
+    };
+    
+    // Get raw scores for all metric versions
+    const boxplotData: Record<string, number[]> = {};
+    
+    for (const [versionKey, versionEnum] of Object.entries(versionMapping)) {
+      try {
+        const { CveSqliteManager } = await import('../scripts/saveToSqlite');
+        const manager = new CveSqliteManager('./cve_database.db');
+        
+        // Get raw CVSS scores for this version
+        const scores = await manager.getCvssScoresForBoxplot({
+          metricVersion: versionKey,
+          isDdosRelated: isDdosRelated,
+          statusFilter: statusValue
+        });
+        
+        await manager.close();
+        
+        if (scores.length > 0) {
+          boxplotData[versionKey] = scores;
+        }
+      } catch (versionError) {
+        console.warn(`Error getting data for CVSS v${versionKey}:`, versionError);
+        // Continue with other versions even if one fails
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      statusFilter: statusValue,
+      ddosOnly: ddosOnlyParam === 'true',
+      boxplotData: boxplotData
+    });
+  } catch (error: any) {
+    console.error('Error getting CVSS box plot data:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to get CVSS box plot data' });
+  }
+});
+
 export default router; 

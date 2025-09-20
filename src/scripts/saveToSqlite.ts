@@ -922,6 +922,77 @@ export class CveSqliteManager {
   }
 
   /**
+   * Get raw CVSS scores for box plot visualization
+   */
+  async getCvssScoresForBoxplot(options: {
+    metricVersion?: string;
+    isDdosRelated?: boolean;
+    publishedAfter?: string;
+    publishedBefore?: string;
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
+  } = {}): Promise<number[]> {
+    await this.openDatabase();
+
+    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+
+    let whereClause = 'WHERE baseScore IS NOT NULL AND baseScore >= 0';
+    const params: any[] = [];
+
+    if (metricVersion) {
+      whereClause += ' AND metricVersion = ?';
+      params.push(metricVersion);
+    }
+
+    if (isDdosRelated !== undefined) {
+      whereClause += ' AND isDdosRelated = ?';
+      params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (publishedAfter) {
+      whereClause += ' AND published >= ?';
+      params.push(publishedAfter);
+    }
+
+    if (publishedBefore) {
+      whereClause += ' AND published <= ?';
+      params.push(publishedBefore);
+    }
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += ' AND (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += ' AND vulnStatus != ?';
+      params.push('Rejected');
+    }
+
+    const query = `
+      SELECT baseScore
+      FROM ${this.tableName}
+      ${whereClause}
+      ORDER BY baseScore
+    `;
+
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.all(query, params, (err: Error | null, rows: any[]) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const scores = rows.map(row => row.baseScore);
+        resolve(scores);
+      });
+    });
+  }
+
+  /**
    * Get CVSS score statistics (min, max, median, etc.)
    */
   async getCvssScoreStats(options: {

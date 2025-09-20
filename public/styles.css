@@ -1009,4 +1009,103 @@ body {
     .ddos-cves-row {
         grid-template-columns: repeat(2, 1fr);
     }
+}
+
+/* CVSS Box Plot Widget Styles */
+.cvss-boxplot-widget {
+    margin-bottom: 24px;
+}
+
+.cvss-boxplot-widget .widget-canvas-wrap {
+    position: relative;
+    width: 100%;
+    height: 400px; /* Slightly taller for box plot */
+}
+
+.cvss-boxplot-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.cvss-boxplot-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #9966ff;
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+.cvss-boxplot-toggle:hover {
+    color: #7a47d6;
+}
+
+.cvss-boxplot-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #9966ff;
+    cursor: pointer;
+}
+
+.cvss-boxplot-toggle-text {
+    user-select: none;
+}
+
+.cvss-boxplot-stats {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(153, 102, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(153, 102, 255, 0.2);
+}
+
+.boxplot-legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #555;
+}
+
+.legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive adjustments for box plot */
+@media (max-width: 768px) {
+    .cvss-boxplot-widget .widget-canvas-wrap {
+        height: 350px;
+    }
+    
+    .boxplot-legend {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    
+    .legend-item {
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .cvss-boxplot-widget .widget-canvas-wrap {
+        height: 300px;
+    }
+    
+    .boxplot-legend {
+        grid-template-columns: 1fr;
+    }
 } 

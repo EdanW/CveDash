@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSeverityChart();
     initYearlyTrendsChart();
     initCvssDistributionChart();
+    initCvssBoxplotChart();
     initCWEWidget();
 });
 
@@ -238,11 +239,12 @@ function updateStatsFromLocalData() {
 
 
 async function refreshData() {
-    // Refresh the pie chart, yearly trends chart, CVSS distribution chart, stats, DDoS CVEs, and CWE widget with current metric version
+    // Refresh the pie chart, yearly trends chart, CVSS distribution chart, box plot, stats, DDoS CVEs, and CWE widget with current metric version
     await Promise.all([
         showSeverityDistribution(),
         showYearlyTrends(),
         showCvssDistribution(),
+        showCvssBoxplot(),
         updateStats(),
         loadDDoSCVEs(),
         initCWEWidget()
@@ -1073,6 +1075,291 @@ function updateCvssStats(stats) {
     if (averageElement) averageElement.textContent = stats.averageScore.toFixed(1);
     if (medianElement) medianElement.textContent = stats.medianScore.toFixed(1);
     if (rangeElement) rangeElement.textContent = `${stats.minScore.toFixed(1)} - ${stats.maxScore.toFixed(1)}`;
+}
+
+// CVSS Box Plot chart functions
+let cvssBoxplotChartInstance = null;
+
+// Initialize and render CVSS box plot chart
+function initCvssBoxplotChart() {
+    // Add toggle event listener
+    const cvssBoxplotToggle = document.getElementById('cvssBoxplotDdosToggle');
+    if (cvssBoxplotToggle) {
+        cvssBoxplotToggle.addEventListener('change', showCvssBoxplot);
+    }
+    
+    // Fetch immediately on load
+    showCvssBoxplot();
+}
+
+// Fetch and display CVSS box plot data
+async function showCvssBoxplot() {
+    // Show loading state
+    showCvssBoxplotLoading();
+    
+    try {
+        const statusParam = selectedStatusFilter !== 'accepted' ? `&statusFilter=${encodeURIComponent(selectedStatusFilter)}` : '';
+        
+        // Check if we should show DDoS only or all CVEs
+        const cvssBoxplotToggle = document.getElementById('cvssBoxplotDdosToggle');
+        const ddosOnly = cvssBoxplotToggle ? cvssBoxplotToggle.checked : false;
+        const ddosParam = ddosOnly ? '&ddosOnly=true' : '';
+        
+        const response = await fetch(`/api/cves/stats/cvss-boxplot?${statusParam}${ddosParam}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                renderCvssBoxplotChart(data.boxplotData, ddosOnly);
+            } else {
+                showCvssBoxplotError(data.error || 'Failed to load CVSS box plot data');
+            }
+        } else {
+            showCvssBoxplotError(`HTTP ${response.status}: Failed to load CVSS box plot`);
+        }
+    } catch (error) {
+        console.error('Error loading CVSS box plot:', error);
+        showCvssBoxplotError('Network error loading CVSS box plot');
+    }
+}
+
+// Show loading state in the CVSS box plot chart area
+function showCvssBoxplotLoading() {
+    const ctx = document.getElementById('cvssBoxplotChart');
+    if (!ctx) return;
+    
+    // Clear any existing chart
+    if (cvssBoxplotChartInstance) {
+        cvssBoxplotChartInstance.destroy();
+        cvssBoxplotChartInstance = null;
+    }
+    
+    // Create a simple loading chart
+    cvssBoxplotChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Loading...'],
+            datasets: [{
+                data: [1],
+                backgroundColor: 'rgba(108, 117, 125, 0.3)',
+                borderColor: '#6c757d',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: 'Loading CVSS box plot data...',
+                    color: '#000000'
+                }
+            },
+            scales: {
+                y: { display: false },
+                x: { display: false }
+            },
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+}
+
+// Show error state in the CVSS box plot chart area
+function showCvssBoxplotError(message) {
+    const ctx = document.getElementById('cvssBoxplotChart');
+    if (!ctx) return;
+    
+    // Clear any existing chart
+    if (cvssBoxplotChartInstance) {
+        cvssBoxplotChartInstance.destroy();
+        cvssBoxplotChartInstance = null;
+    }
+    
+    // Create a simple error chart
+    cvssBoxplotChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Error'],
+            datasets: [{
+                data: [1],
+                backgroundColor: 'rgba(220, 53, 69, 0.3)',
+                borderColor: '#dc3545',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: message || 'Error loading CVSS box plot',
+                    color: '#dc3545'
+                }
+            },
+            scales: {
+                y: { display: false },
+                x: { display: false }
+            },
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+}
+
+function renderCvssBoxplotChart(boxplotData, ddosOnly) {
+    const ctx = document.getElementById('cvssBoxplotChart');
+    if (!ctx) return;
+
+    // Prepare data for proper box plot
+    const versions = ['2.0', '3.0', '3.1', '4.0'];
+    const colors = {
+        '2.0': '#ff6384',
+        '3.0': '#36a2eb', 
+        '3.1': '#4bc0c0',
+        '4.0': '#9966ff'
+    };
+    
+    const labels = [];
+    const datasets = [];
+    const backgroundColors = [];
+    
+    // Check if we have any data
+    const hasData = versions.some(version => boxplotData[version] && boxplotData[version].length > 0);
+    
+    if (!hasData) {
+        // Show no data message
+        if (cvssBoxplotChartInstance) {
+            cvssBoxplotChartInstance.destroy();
+        }
+        cvssBoxplotChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['No Data'],
+                datasets: [{
+                    data: [1],
+                    backgroundColor: 'rgba(108, 117, 125, 0.3)',
+                    borderColor: '#6c757d',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: `No CVSS data available${ddosOnly ? ' for DDoS CVEs' : ''}`,
+                        color: '#000000'
+                    }
+                },
+                scales: {
+                    y: { display: false },
+                    x: { display: false }
+                },
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+        return;
+    }
+
+    // Build box plot datasets
+    versions.forEach(version => {
+        if (boxplotData[version] && boxplotData[version].length > 0) {
+            const scores = boxplotData[version];
+            labels.push(`CVSS v${version}\n(${scores.length} CVEs)`);
+            backgroundColors.push(colors[version]);
+        }
+    });
+
+    // Create datasets for the box plot
+    const boxplotDatasets = [];
+    versions.forEach((version, index) => {
+        if (boxplotData[version] && boxplotData[version].length > 0) {
+            boxplotDatasets.push(boxplotData[version]);
+        }
+    });
+
+    if (cvssBoxplotChartInstance) {
+        cvssBoxplotChartInstance.destroy();
+    }
+
+    cvssBoxplotChartInstance = new Chart(ctx, {
+        type: 'boxplot',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'CVSS Scores',
+                data: boxplotDatasets,
+                backgroundColor: backgroundColors.map(color => color + '60'),
+                borderColor: backgroundColors,
+                borderWidth: 2,
+                outlierColor: '#999999',
+                outlierRadius: 3,
+                itemRadius: 0,
+                itemBackgroundColor: 'rgba(0,0,0,0.1)',
+                meanBackgroundColor: '#ff0000',
+                meanBorderColor: '#ff0000',
+                meanRadius: 3
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: false // Box plots don't need a legend
+                },
+                title: {
+                    display: true,
+                    text: `CVSS Score Distribution by Metric Version${ddosOnly ? ' (DDoS Only)' : ' (All CVEs)'}`,
+                    color: '#000000'
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            return labels[context[0].dataIndex];
+                        },
+                        label: function(context) {
+                            const stats = context.parsed;
+                            return [
+                                `Min: ${stats.min.toFixed(1)}`,
+                                `Q1: ${stats.q1.toFixed(1)}`,
+                                `Median: ${stats.median.toFixed(1)}`,
+                                `Q3: ${stats.q3.toFixed(1)}`,
+                                `Max: ${stats.max.toFixed(1)}`,
+                                `Mean: ${stats.mean ? stats.mean.toFixed(1) : 'N/A'}`,
+                                `Outliers: ${stats.outliers ? stats.outliers.length : 0}`
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'CVSS Metric Version'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    max: 10,
+                    title: {
+                        display: true,
+                        text: 'CVSS Score'
+                    },
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            },
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            }
+        }
+    });
 }
 
 // CVE Search functionality

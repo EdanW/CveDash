@@ -107,6 +107,50 @@
                 </div>
             </div>
 
+            <div class="card cvss-boxplot-widget">
+                <h3 class="widget-title">📊 CVSS Score Box Plot by Metric Version</h3>
+                <div class="cvss-boxplot-controls">
+                    <label class="cvss-boxplot-toggle">
+                        <input type="checkbox" id="cvssBoxplotDdosToggle">
+                        <span class="cvss-boxplot-toggle-text">DDoS Only (uncheck for all CVEs)</span>
+                    </label>
+                </div>
+                <div class="widget-canvas-wrap">
+                    <canvas id="cvssBoxplotChart"></canvas>
+                </div>
+                <div class="cvss-boxplot-stats">
+                    <div class="boxplot-legend">
+                        <div class="legend-item">
+                            <span class="legend-color" style="background-color: #ff6384;"></span>
+                            <span>CVSS v2.0</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background-color: #36a2eb;"></span>
+                            <span>CVSS v3.0</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background-color: #4bc0c0;"></span>
+                            <span>CVSS v3.1</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background-color: #9966ff;"></span>
+                            <span>CVSS v4.0</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 12px; color: #666; margin-top: 12px;">
+                        <h4 style="margin: 0 0 8px 0; color: #333; font-size: 13px;">📖 How to Read This Box Plot:</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: left;">
+                            <div><strong>🔴 Red Dot:</strong> Mean (average) CVSS score</div>
+                            <div><strong>📦 Box:</strong> Middle 50% of scores (Q1 to Q3)</div>
+                            <div><strong>➖ Line in Box:</strong> Median (middle value)</div>
+                            <div><strong>📏 Whiskers:</strong> Min/Max normal range</div>
+                            <div><strong>⚫ Outliers:</strong> Unusually high/low scores</div>
+                            <div><strong>💡 Hover:</strong> See detailed statistics</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="filters-section">
                 <div class="filter-container">
                     <label for="yearFilter" class="filter-label">Filter by Year:</label>
@@ -203,6 +247,7 @@
     
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@sgratzl/chartjs-chart-boxplot"></script>
     <script src="/script.js"></script>
 </body>
 </html> 

@@ -1,5 +1,4 @@
 // --- Tight DDoS detector (precision-focused) ---
-
 export function detectDdosRelated(cve: any): boolean {
   const details = getDdosAnalysisDetails(cve);
   return details.isDdosRelated && details.confidence !== 'LOW';
