@@ -859,7 +859,10 @@ export class CveSqliteManager {
           try {
             const cweIds: string[] = JSON.parse(row.cweIds);
             cweIds.forEach(cweId => {
-              if (cweId && typeof cweId === 'string' && cweId !== 'NVD-CWE-Other') {
+              if (cweId && typeof cweId === 'string' && 
+                  cweId !== 'NVD-CWE-Other' && 
+                  cweId !== 'NVD-CWE-noinfo' && 
+                  cweId !== 'Unknown CWE') {
                 cweCounts[cweId] = (cweCounts[cweId] || 0) + 1;
               }
             });
