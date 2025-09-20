@@ -7,7 +7,7 @@ Schema fields:
   isDdosRelated (boolean)
 */
 
-import { detectDdosRelated } from '../utils/ddosDetection';
+import { detectDdosRelated, getDdosAnalysisDetails } from '../utils/ddosDetection';
 
 export enum MetricVersion {
   NA = '',
@@ -162,6 +162,8 @@ export type TableEntry = {
   impactScore: number;
   cweIds: string[];
   isDdosRelated: boolean;
+  ddosConfidence: string;
+  ddosReasons: string[];
 };
 
 export function buildTableEntryBase(cve: any) {
@@ -173,8 +175,16 @@ export function buildTableEntryBase(cve: any) {
     vulnStatus: cve?.vulnStatus ?? '',
     description: getEnglishDescription(cve),
     cweIds: getCweIds(cve),
-    isDdosRelated: detectDdosRelated(cve),
-  } as Pick<TableEntry, 'id' | 'sourceIdentifier' | 'published' | 'lastModified' | 'vulnStatus' | 'description' | 'cweIds' | 'isDdosRelated'>;
+    // Get full DDoS analysis details
+    ...(() => {
+      const ddosAnalysis = getDdosAnalysisDetails(cve);
+      return {
+        isDdosRelated: ddosAnalysis.isDdosRelated,
+        ddosConfidence: ddosAnalysis.confidence,
+        ddosReasons: ddosAnalysis.reasons
+      };
+    })(),
+  } as Pick<TableEntry, 'id' | 'sourceIdentifier' | 'published' | 'lastModified' | 'vulnStatus' | 'description' | 'cweIds' | 'isDdosRelated' | 'ddosConfidence' | 'ddosReasons'>;
 }
 
 function toTableEntry(base: ReturnType<typeof buildTableEntryBase>, m: FlatMetric): TableEntry {

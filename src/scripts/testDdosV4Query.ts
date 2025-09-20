@@ -18,7 +18,7 @@ async function queryDdosV4Cves() {
     // Query DDoS-related CVEs with CVSS v4.0
     const ddosV4Cves = await manager.queryEntries({
       isDdosRelated: true,
-      metricVersion: '4.0',
+      metricVersion: '3.1',
       limit: 100,
       statusFilter: 'accepted' // Only get accepted/analyzed CVEs
     });
@@ -51,7 +51,7 @@ async function queryDdosV4Cves() {
       
       // Check total v4.0 CVEs
       const totalV4 = await manager.queryEntries({
-        metricVersion: '4.0',
+        metricVersion: '3.1',
         limit: 10
       });
       console.log(`\n📈 Total CVEs with CVSS v4.0 (any type): ${totalV4.length > 0 ? 'Found some' : 'None found'}`);

@@ -1,17 +1,103 @@
-// --- Tight DDoS detector (precision-focused) ---
-export function detectDdosRelated(cve: any): boolean {
-  const details = getDdosAnalysisDetails(cve);
-  return details.isDdosRelated && details.confidence !== 'LOW';
-}
+#!/usr/bin/env -S node --enable-source-maps
+/**
+ * detect-ddos.ts
+ * CLI: flag DDoS-related CVEs from an NVD 2.0 JSON file.
+ *
+ * Usage:
+ *   ts-node detect-ddos.ts nvd.json [--min medium|high] [--reasons] [--json]
+ *   npx tsx detect-ddos.ts nvd.json --min high --reasons
+ *   # Or compile with tsc then: node detect-ddos.js nvd.json --json
+ */
 
-// Normalize CVSS from v2/v3/v4 into comparable fields
+type Confidence = 'LOW'|'MEDIUM'|'HIGH';
+
 type NormCvss = {
   av?: 'NETWORK'|'ADJACENT'|'LOCAL'|'PHYSICAL';
-  ai?: 'NONE'|'LOW'|'HIGH'|'COMPLETE'|'H'|'L'|'N'; // v4 uses H/L/N
-  pr?: 'NONE'|'LOW'|'HIGH'|'N'|'L'|'H';
-  ui?: 'NONE'|'REQUIRED'|'N'|'R';
   ac?: 'LOW'|'HIGH'|'L'|'H';
+  ui?: 'NONE'|'REQUIRED'|'N'|'R';
+  pr?: 'NONE'|'LOW'|'HIGH'|'N'|'L'|'H';
+  a?:  'NONE'|'LOW'|'HIGH'|'COMPLETE'|'N'|'L'|'H';   // v4 VA → a
+  c?:  'NONE'|'LOW'|'HIGH'|'COMPLETE'|'N'|'L'|'H';   // v4 VC → c
+  i?:  'NONE'|'LOW'|'HIGH'|'COMPLETE'|'N'|'L'|'H';   // v4 VI → i
 };
+
+type DdosAnalysis = {
+  isDdosRelated: boolean;
+  reasons: string[];
+  confidence: Confidence;
+};
+
+// ---------------- CLI ----------------
+
+function confPass(a: Confidence, min: Confidence): boolean {
+  const rank = { LOW: 0, MEDIUM: 1, HIGH: 2 } as const;
+  return rank[a] >= rank[min];
+}
+
+async function runCli() {
+  const args = process.argv.slice(2);
+  if (args.length < 1) {
+    console.error('Usage: detect-ddos.ts <nvd.json> [--min medium|high] [--reasons] [--json]');
+    process.exit(2);
+  }
+  const file = args[0];
+  const minFlagIdx = args.indexOf('--min');
+  const minConf: Confidence = (minFlagIdx >= 0 ? String(args[minFlagIdx + 1] || '').toUpperCase() : 'LOW') as Confidence;
+  const wantReasons = args.includes('--reasons');
+  const wantJsonOut = args.includes('--json');
+
+  const raw = await import('node:fs').then(fs => fs.readFileSync(file, 'utf8'));
+  const data = JSON.parse(raw);
+
+  // NVD 2.0 structure: { vulnerabilities: [ { cve: {...} }, ... ] }
+  const items: any[] =
+    Array.isArray(data?.vulnerabilities) ? data.vulnerabilities :
+    Array.isArray(data) ? data : [];
+
+  const results: any[] = [];
+  for (const it of items) {
+    const cve = it?.cve ?? it;
+    const id = cve?.id || cve?.cve?.id || 'UNKNOWN';
+    const analysis = getDdosAnalysisDetails(cve);
+    const passed = analysis.isDdosRelated && confPass(analysis.confidence, (minConf || 'LOW') as Confidence);
+
+    if (wantJsonOut) {
+      results.push({
+        id,
+        ddos: passed,
+        confidence: analysis.confidence,
+        ...(wantReasons ? { reasons: analysis.reasons } : {}),
+      });
+    } else {
+      if (passed) {
+        console.log(`${id}\tddos=true\tconfidence=${analysis.confidence}`);
+        if (wantReasons) for (const r of analysis.reasons) console.log(`  - ${r}`);
+      } else if (wantReasons) {
+        console.log(`${id}\tddos=false\tconfidence=${analysis.confidence}`);
+        for (const r of analysis.reasons) console.log(`  - ${r}`);
+      }
+    }
+  }
+
+  if (wantJsonOut) {
+    console.log(JSON.stringify(results, null, 2));
+  }
+}
+
+// Only run CLI when this file is executed directly
+if (require.main === module) {
+  runCli().catch(err => {
+    console.error('Error:', err?.message || err);
+    process.exit(1);
+  });
+}
+
+// -------------- Detector (strict) --------------
+
+export function detectDdosRelated(cve: any): boolean {
+  const d = getDdosAnalysisDetails(cve);
+  return d.isDdosRelated && d.confidence !== 'LOW';
+}
 
 function extractNormCvss(cve: any): NormCvss[] {
   const m = cve?.metrics || {};
@@ -22,40 +108,133 @@ function extractNormCvss(cve: any): NormCvss[] {
     ...(m.cvssMetricV2  || []),
   ];
   const out: NormCvss[] = [];
+  
+  // Helper functions to safely cast to expected types
+  const parseAv = (v: any): NormCvss['av'] => {
+    const val = String(v ?? '').toUpperCase();
+    if (['NETWORK', 'ADJACENT', 'LOCAL', 'PHYSICAL'].includes(val)) {
+      return val as NormCvss['av'];
+    }
+    return undefined;
+  };
+  
+  const parseAc = (v: any): NormCvss['ac'] => {
+    const val = String(v ?? '').toUpperCase();
+    if (['LOW', 'HIGH', 'L', 'H'].includes(val)) {
+      return val as NormCvss['ac'];
+    }
+    return undefined;
+  };
+  
+  const parseUi = (v: any): NormCvss['ui'] => {
+    const val = String(v ?? '').toUpperCase();
+    if (['NONE', 'REQUIRED', 'N', 'R'].includes(val)) {
+      return val as NormCvss['ui'];
+    }
+    return undefined;
+  };
+  
+  const parsePr = (v: any): NormCvss['pr'] => {
+    const val = String(v ?? '').toUpperCase();
+    if (['NONE', 'LOW', 'HIGH', 'N', 'L', 'H'].includes(val)) {
+      return val as NormCvss['pr'];
+    }
+    return undefined;
+  };
+  
+  const parseImpact = (v: any): NormCvss['a'] => {
+    const val = String(v ?? '').toUpperCase();
+    if (['NONE', 'LOW', 'HIGH', 'COMPLETE', 'N', 'L', 'H'].includes(val)) {
+      return val as NormCvss['a'];
+    }
+    return undefined;
+  };
+  
   for (const x of all) {
     const d = x?.cvssData || {};
-    const av = (d.attackVector || d.accessVector || '').toUpperCase();
-    const ai = (d.availabilityImpact || d.va || d.vi || '').toUpperCase(); // v4: VA
-    const pr = (d.privilegesRequired || d.pr || '').toUpperCase();
-    const ui = (d.userInteraction || d.ui || '').toUpperCase();
-    const ac = (d.attackComplexity || d.accessComplexity || d.ac || '').toUpperCase();
-    out.push({ av, ai, pr, ui, ac });
+    out.push({
+      av: parseAv(d.attackVector || d.accessVector || d.av),
+      ac: parseAc(d.attackComplexity || d.accessComplexity || d.ac),
+      ui: parseUi(d.userInteraction || d.ui),
+      pr: parsePr(d.privilegesRequired || d.pr),
+      a:  parseImpact(d.availabilityImpact || d.va),
+      c:  parseImpact(d.confidentialityImpact || d.vc),
+      i:  parseImpact(d.integrityImpact || d.vi),
+    });
   }
   return out;
 }
 
-function metricsPassDdosGate(norms: NormCvss[]): {passed: boolean, bonus: number, reason: string[]} {
+// Gate: network/adjacent + high availability + low C/I; bonus for PR:N, UI:N, AC:L
+function metricsPassGate(norms: NormCvss[]): {passed: boolean; bonus: number; reasons: string[]} {
+  const reasons: string[] = [];
   let passed = false;
   let bonus = 0;
-  const reasons: string[] = [];
+
   for (const n of norms) {
     const avOK = n.av === 'NETWORK' || n.av === 'ADJACENT';
-    const aiVal = n.ai;
-    const aiHigh = aiVal === 'HIGH' || aiVal === 'COMPLETE' || aiVal === 'H';
-    if (avOK && aiHigh) {
+    const aHigh = n.a === 'HIGH' || n.a === 'COMPLETE' || n.a === 'H';
+    const cLow  = !n.c || n.c === 'NONE' || n.c === 'LOW' || n.c === 'N' || n.c === 'L';
+    const iLow  = !n.i || n.i === 'NONE' || n.i === 'LOW' || n.i === 'N' || n.i === 'L';
+    if (avOK && aHigh && cLow && iLow) {
       passed = true;
-      reasons.push(`CVSS gate: AV=${n.av}, A=${aiVal}`);
+      reasons.push(`CVSS gate: AV=${n.av}, A=${n.a || 'N/A'}, C=${n.c || 'N/A'}, I=${n.i || 'N/A'}`);
       if (n.pr === 'NONE' || n.pr === 'N') { bonus += 1; reasons.push('PR:N'); }
       if (n.ui === 'NONE' || n.ui === 'N') { bonus += 1; reasons.push('UI:N'); }
       if (n.ac === 'LOW'  || n.ac === 'L') { bonus += 1; reasons.push('AC:L'); }
       break;
     }
   }
-  return { passed, bonus, reason: reasons };
+  return { passed, bonus, reasons };
 }
 
-// --- Keep your existing helpers (unchanged) ---
-function getEnglishDescription(cve: any): string { /* as in your code */ return (function(){
+// Description lexicon: amplification/reflection/spoofing/protocol hints (NO "denial of service")
+function hasAmplificationLexicon(text: string): boolean {
+  if (!text) return false;
+  const kw = [
+    'amplification','amplify','reflect','reflection','reflected','drdos',
+    'spoof','spoofed','spoofing','open resolver','traffic amplification',
+    'packet amplification','bandwidth amplification','bandwidth exhaustion','ddos', 'distributed denial of service', 'distributed denial', 'ddos attack', 'ddos attack vector', 'ddos attack surface', 'ddos attack vector', 'ddos attack surface', 'ddos attack vector', 'ddos attack surface',
+    // DDoS-able protocols/features
+    'ntp','monlist','dns','open dns resolver','mdns','ssdp','ws-discovery',
+    'cldap','ldap','snmp','chargen','qotd','mssql','memcached','coap',
+    'ripv1','nbns','sntp'
+  ];
+  const t = text.toLowerCase();
+  return kw.some(k => t.includes(k));
+}
+
+// Negative hints for generic/local DoS or non-DDoS web vulns
+function hasNegativeHints(text: string): boolean {
+  if (!text) return false;
+  const neg = [
+    'sql injection','sql-injection','sqli',
+    'cross-site scripting','xss',
+    'null pointer','use-after-free','out-of-bounds','oob read','oob write',
+    'integer overflow','infinite loop','resource exhaustion','memory exhaustion',
+    'cpu exhaustion','hang','crash','kernel panic','local user','authenticated user'
+  ];
+  const t = text.toLowerCase();
+  return neg.some(k => t.includes(k));
+}
+
+// Only strong DDoS CWEs
+function hasStrongDdosCwe(cweIds: string[]): boolean {
+  const strong = new Set(['CWE-405','CWE-406','CWE-770']);
+  return cweIds?.some(id => strong.has(id));
+}
+
+// References: keep ddos terms and classic ddos vendors; avoid "denial of service"
+function hasDdosRefHints(refs: string[]): boolean {
+  if (!refs?.length) return false;
+  const terms = ['ddos','drdos','amplification','reflection','booter','stresser'];
+  const vendors = ['cloudflare','akamai','netscout','arbor','imperva','cisa.gov'];
+  return refs.some(r => terms.some(t => r.includes(t))) || refs.some(r => vendors.some(v => r.includes(v)));
+}
+
+// -------- Your original lightweight helpers (kept) --------
+
+function getEnglishDescription(cve: any): string {
   const descriptions = cve?.descriptions;
   if (Array.isArray(descriptions)) {
     const en = descriptions.find((d: any) => d?.lang === 'en');
@@ -64,9 +243,9 @@ function getEnglishDescription(cve: any): string { /* as in your code */ return 
     if (first) return String(first).toLowerCase();
   }
   return '';
-})(); }
+}
 
-function getCweIds(cve: any): string[] { /* as in your code */ return (function(){
+function getCweIds(cve: any): string[] {
   const weaknesses = cve?.weaknesses;
   const result: string[] = [];
   if (Array.isArray(weaknesses)) {
@@ -80,9 +259,9 @@ function getCweIds(cve: any): string[] { /* as in your code */ return (function(
     }
   }
   return result;
-})(); }
+}
 
-function getReferences(cve: any): string[] { /* as in your code */ return (function(){
+function getReferences(cve: any): string[] {
   const references = cve?.references;
   const result: string[] = [];
   if (Array.isArray(references)) {
@@ -92,92 +271,49 @@ function getReferences(cve: any): string[] { /* as in your code */ return (funct
     }
   }
   return result;
-})(); }
-
-// --- New, tighter text/indicator checks (no "denial of service") ---
-
-function checkAmplificationLexicon(text: string): boolean {
-  if (!text) return false;
-  const kws = [
-    // mechanics
-    'amplification', 'amplify', 'reflect', 'reflection', 'reflected', 'drdos',
-    'spoof', 'spoofed', 'spoofing', 'open resolver', 'traffic amplification',
-    'bandwidth exhaustion', 'packet amplification', 'attack amplification',
-    // well-known DDoS-able protocols/features
-    'ntp', 'monlist', 'dns', 'open dns resolver', 'mdns', 'ssdp', 'ws-discovery',
-    'cldap', 'ldap', 'snmp', 'chargen', 'qotd', 'mssql', 'memcached', 'coap',
-    'ripv1', 'nbns', 'ssdp', 'sntp'
-  ];
-  return kws.some(k => text.includes(k));
 }
 
-function checkNegativeDoSIndicators(text: string): boolean {
-  if (!text) return false;
-  const negatives = [
-    // classic local/impl bugs more likely simple DoS
-    'null pointer', 'use-after-free', 'out-of-bounds', 'oob read', 'oob write',
-    'integer overflow', 'race condition', 'infinite loop', 'resource exhaustion',
-    'memory exhaustion', 'cpu exhaustion', 'hang', 'crash', 'kernel panic',
-    'local user', 'local attacker', 'authenticated user', 'privileged user'
-  ];
-  return negatives.some(k => text.includes(k));
-}
+// --------------- Final analyzer ---------------
 
-function checkDdosCweIdsTight(cweIds: string[]): boolean {
-  // Narrow only to strong DDoS signals
-  const strong = new Set([
-    'CWE-405', // Asymmetric Resource Consumption (Amplification)
-    'CWE-406', // Insufficient Control of Network Message Volume (Amplification)
-    'CWE-770', // Allocation Without Limits/Throttling
-  ]);
-  return cweIds.some(id => strong.has(id));
-}
-
-function checkReferenceHints(references: string[]): boolean {
-  if (!references?.length) return false;
-  // Keep "ddos" but drop "denial of service"
-  const refKws = ['ddos', 'amplification', 'reflection', 'drdos', 'booter', 'stresser'];
-  // Give extra weight if reputable DDoS sources appear
-  const ddosDomains = ['cloudflare', 'akamai', 'netscout', 'arbor', 'imperva', 'cisa.gov'];
-  return references.some(r => refKws.some(k => r.includes(k))) ||
-         references.some(r => ddosDomains.some(d => r.includes(d)));
-}
-
-// --- Final explainer with scoring ---
-export function getDdosAnalysisDetails(cve: any): {
-  isDdosRelated: boolean;
-  reasons: string[];
-  confidence: 'LOW'|'MEDIUM'|'HIGH';
-} {
+export function getDdosAnalysisDetails(cve: any): DdosAnalysis {
   const reasons: string[] = [];
   let score = 0;
 
-  // 1) CVSS gate
+  // CVSS gate
   const norms = extractNormCvss(cve);
-  const gate = metricsPassDdosGate(norms);
+  const gate = metricsPassGate(norms);
   if (!gate.passed) {
-    return { isDdosRelated: false, reasons: ['CVSS gate failed (need AV:N/A and A:High)'], confidence: 'LOW' };
+    return { isDdosRelated: false, reasons: ['CVSS gate failed (need AV: Network/Adjacent, A: High, C/I: Low)'], confidence: 'LOW' };
   }
-  score += 1 + gate.bonus; // base + small bonus from PR/UI/AC
-  reasons.push(...gate.reason);
+  score += 1 + gate.bonus;
+  reasons.push(...gate.reasons);
 
-  // 2) Textual heuristics (description) — no "denial of service"
+  // Description
   const desc = getEnglishDescription(cve);
-  if (checkAmplificationLexicon(desc)) { score += 3; reasons.push('Amplification/reflection/spoofing lexicon found'); }
-  if (checkNegativeDoSIndicators(desc)) { score -= 2; reasons.push('Negative indicators for generic/local DoS'); }
+  if (hasAmplificationLexicon(desc)) { score += 3; reasons.push('Amplification/reflection/spoofing lexicon found'); }
+  if (hasNegativeHints(desc))       { score -= 2; reasons.push('Negative indicators for generic/local DoS or non-DDoS web vulns'); }
 
-  // 3) CWE (tight)
+  // CWE
   const cwes = getCweIds(cve);
-  if (checkDdosCweIdsTight(cwes)) { score += 2; reasons.push(`Strong DDoS CWE present: ${cwes.join(', ')}`); }
+  if (hasStrongDdosCwe(cwes)) { score += 2; reasons.push(`Strong DDoS CWE present: ${cwes.join(', ')}`); }
 
-  // 4) References (keep “ddos”, drop “denial of service”)
+  // References
   const refs = getReferences(cve);
-  if (checkReferenceHints(refs)) { score += 2; reasons.push('References indicate DDoS/amplification'); }
+  if (hasDdosRefHints(refs)) { score += 2; reasons.push('References indicate DDoS/amplification'); }
 
-  // Decision thresholds:
-  // - High confidence: strong text/ref + CVSS gate ⇒ score ≥ 6
-  // - Medium: CVSS gate + at least one strong signal ⇒ score ≥ 4
-  let confidence: 'LOW'|'MEDIUM'|'HIGH' = 'LOW';
+  // NEW hard requirement: at least one DDoS-specific signal
+  const hasDdosSignal =
+  hasAmplificationLexicon(desc) ||
+  hasStrongDdosCwe(cwes) ||
+  hasDdosRefHints(refs);
+
+  if (!hasDdosSignal) {
+    return { isDdosRelated: false,
+             reasons: [...gate.reasons, 'No DDoS-specific signal found'],
+             confidence: 'LOW' };
+  }
+  // Decision
+  let confidence: Confidence = 'LOW';
   if (score >= 6) confidence = 'HIGH';
   else if (score >= 4) confidence = 'MEDIUM';
 
