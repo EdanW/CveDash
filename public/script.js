@@ -192,9 +192,8 @@ function showMoreCVEs() {
 }
 
 async function updateStats() {
-    // Show loading state for total CVEs and average CVSS
+    // Show loading state for DDoS percentage
     document.getElementById('totalCVEs').textContent = '⏳';
-    document.getElementById('avgCVSS').textContent = '⏳';
     
     // Update the label with current metric version
     const metricVersion = window.currentMetricVersion || 'latest';
@@ -209,10 +208,8 @@ async function updateStats() {
         if (response.ok) {
             const data = await response.json();
             if (data.success) {
-                // Display ratio information with percentage on separate line
-                const ratioText = `${data.ddosCount.toLocaleString()} / ${data.nonDdosCount.toLocaleString()}<br>${data.ddosRatio}%`;
-                document.getElementById('totalCVEs').innerHTML = ratioText;
-                document.getElementById('avgCVSS').textContent = data.averageScore.toFixed(1);
+                // Display only percentage
+                document.getElementById('totalCVEs').textContent = `${data.ddosRatio}%`;
             } else {
                 console.error('Failed to get CVE count:', data.error);
                 // Fallback to local data
@@ -228,21 +225,15 @@ async function updateStats() {
         // Fallback to local data
         updateStatsFromLocalData();
     }
-    
-    // Update other stats from local data (these don't depend on metric version)
-    const criticalCVEs = cves.filter(c => c.severity === 'CRITICAL').length;
-    const activeCVEs = cves.filter(c => c.status === 'ACTIVE').length;
-    
-    document.getElementById('criticalCVEs').textContent = criticalCVEs;
-    document.getElementById('activeCVEs').textContent = activeCVEs;
 }
 
 function updateStatsFromLocalData() {
+    // Calculate DDoS percentage from local data
     const totalCVEs = cves.length;
-    const avgCVSS = cves.length > 0 ? (cves.reduce((sum, c) => sum + c.cvssScore, 0) / cves.length).toFixed(1) : '0.0';
+    const ddosCVEs = cves.filter(c => c.ddosRelated).length;
+    const ddosPercentage = totalCVEs > 0 ? ((ddosCVEs / totalCVEs) * 100).toFixed(1) : '0.0';
     
-    document.getElementById('totalCVEs').textContent = totalCVEs;
-    document.getElementById('avgCVSS').textContent = avgCVSS;
+    document.getElementById('totalCVEs').textContent = `${ddosPercentage}%`;
 }
 
 
@@ -449,20 +440,21 @@ function renderSeverityChart(distribution, metricVersion) {
                     borderWidth: 1
                 }]
             },
-            options: {
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    title: {
-                        display: true,
-                        text: 'No severity data available',
-                        color: '#000000'
-                    }
+        options: {
+            plugins: {
+                legend: {
+                    display: false
                 },
-                layout: { padding: 20 },
-                responsive: true
-            }
+                title: {
+                    display: true,
+                    text: 'No severity data available',
+                    color: '#000000'
+                }
+            },
+            layout: { padding: 20 },
+            responsive: true,
+            maintainAspectRatio: false
+        }
         });
         return;
     }
@@ -518,7 +510,8 @@ function renderSeverityChart(distribution, metricVersion) {
                 }
             },
             layout: { padding: 0 },
-            responsive: true
+            responsive: true,
+            maintainAspectRatio: false
         }
     });
 }
