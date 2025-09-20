@@ -10,24 +10,26 @@
     <div class="container">
         <div class="header">
             <div class="header-controls">
-                <div class="metric-toggle" aria-label="Select metric version">
-                    <label for="metricVersionSelect" class="metric-toggle__label">Metric:</label>
-                    <select id="metricVersionSelect" class="metric-toggle__select">
-                        <option value="latest" selected>Latest</option>
-                        <option value="v2">CVSS v2</option>
-                        <option value="v3.0">CVSS v3.0</option>
-                        <option value="v3.1">CVSS v3.1</option>
-                        <option value="v4.0">CVSS v4.0</option>
-                    </select>
+                <div class="header-controls-left">
+                    <div class="metric-toggle" aria-label="Select metric version">
+                        <label for="metricVersionSelect" class="metric-toggle__label">Metric:</label>
+                        <select id="metricVersionSelect" class="metric-toggle__select">
+                            <option value="v2" selected>CVSS v2</option>
+                            <option value="v3.0">CVSS v3.0</option>
+                            <option value="v3.1">CVSS v3.1</option>
+                            <option value="v4.0">CVSS v4.0</option>
+                        </select>
+                    </div>
+                    <div class="status-toggle" aria-label="Select vulnerability status filter">
+                        <label for="statusFilterSelect" class="status-toggle__label">Status:</label>
+                        <select id="statusFilterSelect" class="status-toggle__select">
+                            <option value="accepted" selected>Only Accepted</option>
+                            <option value="open-accepted">Open & Accepted</option>
+                            <option value="all">All (Including Rejected)</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="status-toggle" aria-label="Select vulnerability status filter">
-                    <label for="statusFilterSelect" class="status-toggle__label">Status:</label>
-                    <select id="statusFilterSelect" class="status-toggle__select">
-                        <option value="accepted" selected>Only Accepted</option>
-                        <option value="open-accepted">Open & Accepted</option>
-                        <option value="all">All (Including Rejected)</option>
-                    </select>
-                </div>
+                <button class="btn btn-refresh" onclick="refreshData()" title="Refresh all data">🔄</button>
             </div>
             <h1>🛡️ CVE Dashboard</h1>
             <p>Monitor and manage DDoS-related vulnerabilities</p>
@@ -46,7 +48,6 @@
                     <input type="text" id="cveSearchInput" placeholder="Search CVE ID (e.g., 2009-0041)" class="search-input">
                     <button class="btn btn-primary" onclick="searchCVE()">🔍 Search</button>
                 </div>
-                <button class="btn btn-success" onclick="refreshData()">🔄 Refresh</button>
                 <button class="btn btn-warning" onclick="filterDDoSOnly()">🛡️ DDoS Only</button>
             </div>
 
@@ -139,7 +140,7 @@
                     </div>
                     <div style="font-size: 12px; color: #666; margin-top: 12px;">
                         <h4 style="margin: 0 0 8px 0; color: #333; font-size: 13px;">📖 How to Read This Box Plot:</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: left;">
+                        <div style="display: grid; grid-template-columns: auto auto auto; gap: 12px; text-align: left; justify-content: start;">
                             <div><strong>🔴 Red Dot:</strong> Mean (average) CVSS score</div>
                             <div><strong>📦 Box:</strong> Middle 50% of scores (Q1 to Q3)</div>
                             <div><strong>➖ Line in Box:</strong> Median (middle value)</div>

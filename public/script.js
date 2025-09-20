@@ -10,13 +10,12 @@ let selectedStatusFilter = 'accepted';
 // Map frontend metric version values to database values
 function mapMetricVersion(frontendValue) {
     const mapping = {
-        'latest': '3.1',  // Default to CVSS 3.1
         'v2': '2.0',
         'v3.0': '3.0', 
         'v3.1': '3.1',
         'v4.0': '4.0'
     };
-    return mapping[frontendValue] || '3.1';
+    return mapping[frontendValue] || '2.0';
 }
 
 // Load CVEs on page load
@@ -197,9 +196,9 @@ async function updateStats() {
     document.getElementById('totalCVEs').textContent = '⏳';
     
     // Update the label with current metric version
-    const metricVersion = window.currentMetricVersion || 'latest';
+    const metricVersion = window.currentMetricVersion || 'v2';
     const mappedVersion = mapMetricVersion(metricVersion);
-    const versionDisplay = metricVersion === 'latest' ? 'CVSS 3.1' : `CVSS ${mappedVersion}`;
+    const versionDisplay = `CVSS ${mappedVersion}`;
     document.getElementById('totalCVEsLabel').textContent = `DDoS vs Other CVEs (${versionDisplay})`;
     
     try {
@@ -1494,7 +1493,7 @@ function initMetricToggle() {
     if (!select) return;
     
     // Load saved metric version from localStorage
-    const savedMetricVersion = localStorage.getItem('metricVersion') || 'latest';
+    const savedMetricVersion = localStorage.getItem('metricVersion') || 'v2';
     select.value = savedMetricVersion;
     window.currentMetricVersion = savedMetricVersion;
     
@@ -1697,7 +1696,9 @@ function getCweDescription(cweId) {
         'CWE-125': 'Out-of-bounds Read',
         'CWE-399': 'Resource Management Errors',
         'CWE-362': 'Concurrent Execution using Shared Resource',
-        'CWE-400': 'Uncontrolled Resource Consumption'
+        'CWE-400': 'Uncontrolled Resource Consumption',
+        'CWE-74': 'Improper Neutralization of Special Elements in Output Used by a Downstream Component',
+        'CWE-120': 'Buffer Copy without Checking Size of Input'
     };
     
     return cweDescriptions[cweId] || 'Unknown CWE';
