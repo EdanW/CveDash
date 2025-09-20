@@ -796,6 +796,248 @@ export class CveSqliteManager {
    * Get CWE statistics for DDoS-related entries
    * Returns count of unique CWE IDs from DDoS-related CVEs
    */
+  /**
+   * Get CVSS score distribution in ranges for histogram visualization
+   * Returns count of entries grouped by score ranges
+   */
+  async getCvssScoreDistribution(options: {
+    metricVersion?: string;
+    isDdosRelated?: boolean;
+    publishedAfter?: string;
+    publishedBefore?: string;
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
+  } = {}): Promise<Array<{
+    range: string;
+    count: number;
+    minScore: number;
+    maxScore: number;
+  }>> {
+    await this.openDatabase();
+
+    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+
+    let whereClause = 'WHERE baseScore IS NOT NULL AND baseScore >= 0';
+    const params: any[] = [];
+
+    if (metricVersion) {
+      whereClause += ' AND metricVersion = ?';
+      params.push(metricVersion);
+    }
+
+    if (isDdosRelated !== undefined) {
+      whereClause += ' AND isDdosRelated = ?';
+      params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (publishedAfter) {
+      whereClause += ' AND published >= ?';
+      params.push(publishedAfter);
+    }
+
+    if (publishedBefore) {
+      whereClause += ' AND published <= ?';
+      params.push(publishedBefore);
+    }
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += ' AND (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += ' AND vulnStatus != ?';
+      params.push('Rejected');
+    }
+
+    // Create score ranges using CASE statements
+    const query = `
+      SELECT 
+        CASE 
+          WHEN baseScore >= 0 AND baseScore < 1 THEN '0.0-0.9'
+          WHEN baseScore >= 1 AND baseScore < 2 THEN '1.0-1.9'
+          WHEN baseScore >= 2 AND baseScore < 3 THEN '2.0-2.9'
+          WHEN baseScore >= 3 AND baseScore < 4 THEN '3.0-3.9'
+          WHEN baseScore >= 4 AND baseScore < 5 THEN '4.0-4.9'
+          WHEN baseScore >= 5 AND baseScore < 6 THEN '5.0-5.9'
+          WHEN baseScore >= 6 AND baseScore < 7 THEN '6.0-6.9'
+          WHEN baseScore >= 7 AND baseScore < 8 THEN '7.0-7.9'
+          WHEN baseScore >= 8 AND baseScore < 9 THEN '8.0-8.9'
+          WHEN baseScore >= 9 AND baseScore <= 10 THEN '9.0-10.0'
+          ELSE 'Unknown'
+        END as scoreRange,
+        COUNT(*) as count,
+        CASE 
+          WHEN baseScore >= 0 AND baseScore < 1 THEN 0
+          WHEN baseScore >= 1 AND baseScore < 2 THEN 1
+          WHEN baseScore >= 2 AND baseScore < 3 THEN 2
+          WHEN baseScore >= 3 AND baseScore < 4 THEN 3
+          WHEN baseScore >= 4 AND baseScore < 5 THEN 4
+          WHEN baseScore >= 5 AND baseScore < 6 THEN 5
+          WHEN baseScore >= 6 AND baseScore < 7 THEN 6
+          WHEN baseScore >= 7 AND baseScore < 8 THEN 7
+          WHEN baseScore >= 8 AND baseScore < 9 THEN 8
+          WHEN baseScore >= 9 AND baseScore <= 10 THEN 9
+          ELSE 0
+        END as minScore,
+        CASE 
+          WHEN baseScore >= 0 AND baseScore < 1 THEN 0.9
+          WHEN baseScore >= 1 AND baseScore < 2 THEN 1.9
+          WHEN baseScore >= 2 AND baseScore < 3 THEN 2.9
+          WHEN baseScore >= 3 AND baseScore < 4 THEN 3.9
+          WHEN baseScore >= 4 AND baseScore < 5 THEN 4.9
+          WHEN baseScore >= 5 AND baseScore < 6 THEN 5.9
+          WHEN baseScore >= 6 AND baseScore < 7 THEN 6.9
+          WHEN baseScore >= 7 AND baseScore < 8 THEN 7.9
+          WHEN baseScore >= 8 AND baseScore < 9 THEN 8.9
+          WHEN baseScore >= 9 AND baseScore <= 10 THEN 10.0
+          ELSE 0
+        END as maxScore
+      FROM ${this.tableName}
+      ${whereClause}
+      GROUP BY scoreRange, minScore, maxScore
+      ORDER BY minScore
+    `;
+
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.all(query, params, (err: Error | null, rows: any[]) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const result = rows.map(row => ({
+          range: row.scoreRange,
+          count: row.count,
+          minScore: row.minScore,
+          maxScore: row.maxScore
+        }));
+
+        resolve(result);
+      });
+    });
+  }
+
+  /**
+   * Get CVSS score statistics (min, max, median, etc.)
+   */
+  async getCvssScoreStats(options: {
+    metricVersion?: string;
+    isDdosRelated?: boolean;
+    publishedAfter?: string;
+    publishedBefore?: string;
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
+  } = {}): Promise<{
+    min: number;
+    max: number;
+    median: number;
+  }> {
+    await this.openDatabase();
+
+    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+
+    let whereClause = 'WHERE baseScore IS NOT NULL AND baseScore >= 0';
+    const params: any[] = [];
+
+    if (metricVersion) {
+      whereClause += ' AND metricVersion = ?';
+      params.push(metricVersion);
+    }
+
+    if (isDdosRelated !== undefined) {
+      whereClause += ' AND isDdosRelated = ?';
+      params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (publishedAfter) {
+      whereClause += ' AND published >= ?';
+      params.push(publishedAfter);
+    }
+
+    if (publishedBefore) {
+      whereClause += ' AND published <= ?';
+      params.push(publishedBefore);
+    }
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += ' AND (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += ' AND vulnStatus != ?';
+      params.push('Rejected');
+    }
+
+    const query = `
+      SELECT 
+        MIN(baseScore) as minScore,
+        MAX(baseScore) as maxScore,
+        COUNT(*) as totalCount
+      FROM ${this.tableName}
+      ${whereClause}
+    `;
+
+    // For median, we need a separate query
+    const medianQuery = `
+      SELECT baseScore
+      FROM ${this.tableName}
+      ${whereClause}
+      ORDER BY baseScore
+      LIMIT 1 OFFSET (
+        SELECT (COUNT(*) - 1) / 2
+        FROM ${this.tableName}
+        ${whereClause}
+      )
+    `;
+
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      // Get min/max first
+      this.db.get(query, params, (err: Error | null, row: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const minScore = row?.minScore || 0;
+        const maxScore = row?.maxScore || 0;
+        const totalCount = row?.totalCount || 0;
+
+        if (totalCount === 0) {
+          resolve({ min: 0, max: 0, median: 0 });
+          return;
+        }
+
+        // Get median
+        if (!this.db) {
+          reject(new Error('Database not initialized'));
+          return;
+        }
+        
+        this.db.get(medianQuery, params, (medianErr: Error | null, medianRow: any) => {
+          if (medianErr) {
+            reject(medianErr);
+            return;
+          }
+
+          const median = medianRow?.baseScore || 0;
+          resolve({
+            min: Math.round(minScore * 100) / 100,
+            max: Math.round(maxScore * 100) / 100,
+            median: Math.round(median * 100) / 100
+          });
+        });
+      });
+    });
+  }
+
   async getCweStatistics(options: {
     metricVersion?: string;
     publishedAfter?: string;

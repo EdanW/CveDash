@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadCVEsOnce();
     initSeverityChart();
     initYearlyTrendsChart();
+    initCvssDistributionChart();
     initCWEWidget();
 });
 
@@ -246,10 +247,11 @@ function updateStatsFromLocalData() {
 
 
 async function refreshData() {
-    // Refresh the pie chart, yearly trends chart, stats, DDoS CVEs, and CWE widget with current metric version
+    // Refresh the pie chart, yearly trends chart, CVSS distribution chart, stats, DDoS CVEs, and CWE widget with current metric version
     await Promise.all([
         showSeverityDistribution(),
         showYearlyTrends(),
+        showCvssDistribution(),
         updateStats(),
         loadDDoSCVEs(),
         initCWEWidget()
@@ -774,6 +776,310 @@ function renderYearlyTrendsChart(yearlyData, yearlyDdosData, metricVersion) {
             }
         }
     });
+}
+
+// CVSS Score Distribution chart functions
+let cvssDistributionChartInstance = null;
+
+// Initialize and render CVSS distribution chart
+function initCvssDistributionChart() {
+    // Add toggle event listener
+    const cvssToggle = document.getElementById('cvssShowAllToggle');
+    if (cvssToggle) {
+        cvssToggle.addEventListener('change', showCvssDistribution);
+    }
+    
+    // Fetch immediately on load
+    showCvssDistribution();
+}
+
+// Fetch and display CVSS score distribution
+async function showCvssDistribution() {
+    // Show loading state
+    showCvssDistributionLoading();
+    
+    try {
+        const metricVersion = window.currentMetricVersion || 'latest';
+        const mappedVersion = mapMetricVersion(metricVersion);
+        const statusParam = selectedStatusFilter !== 'accepted' ? `&statusFilter=${encodeURIComponent(selectedStatusFilter)}` : '';
+        
+        // Check if we should show all CVEs or just DDoS-related ones
+        const cvssToggle = document.getElementById('cvssShowAllToggle');
+        const showAll = cvssToggle ? cvssToggle.checked : true;
+        const ddosParam = showAll ? '' : '&ddosOnly=true';
+        
+        const response = await fetch(`/api/cves/stats/cvss-distribution?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}${ddosParam}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+                renderCvssDistributionChart(data.scoreDistribution, data.stats, mappedVersion, !showAll);
+                updateCvssStats(data.stats);
+            } else {
+                showCvssDistributionError(data.error || 'Failed to load CVSS distribution data');
+            }
+        } else {
+            showCvssDistributionError(`HTTP ${response.status}: Failed to load CVSS distribution`);
+        }
+    } catch (error) {
+        console.error('Error loading CVSS distribution:', error);
+        showCvssDistributionError('Network error loading CVSS distribution');
+    }
+}
+
+// Show loading state in the CVSS distribution chart area
+function showCvssDistributionLoading() {
+    const ctx = document.getElementById('cvssDistributionChart');
+    if (!ctx) return;
+    
+    // Clear any existing chart
+    if (cvssDistributionChartInstance) {
+        cvssDistributionChartInstance.destroy();
+        cvssDistributionChartInstance = null;
+    }
+    
+    // Create a simple loading chart
+    cvssDistributionChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Loading...'],
+            datasets: [{
+                data: [1],
+                backgroundColor: 'rgba(108, 117, 125, 0.3)',
+                borderColor: '#6c757d',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: '🔄 Loading CVSS Score Distribution...',
+                    color: '#ffffff',
+                    font: {
+                        size: 16,
+                        weight: 'bold'
+                    }
+                }
+            },
+            scales: {
+                x: { display: false },
+                y: { display: false }
+            },
+            maintainAspectRatio: false
+        }
+    });
+}
+
+// Show error state in the CVSS distribution chart area
+function showCvssDistributionError(message) {
+    const ctx = document.getElementById('cvssDistributionChart');
+    if (!ctx) return;
+    
+    // Clear any existing chart
+    if (cvssDistributionChartInstance) {
+        cvssDistributionChartInstance.destroy();
+        cvssDistributionChartInstance = null;
+    }
+    
+    // Create a simple error chart
+    cvssDistributionChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Error'],
+            datasets: [{
+                data: [1],
+                backgroundColor: 'rgba(220, 53, 69, 0.3)',
+                borderColor: '#dc3545',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: `❌ ${message}`,
+                    color: '#dc3545',
+                    font: {
+                        size: 16,
+                        weight: 'bold'
+                    }
+                }
+            },
+            scales: {
+                x: { display: false },
+                y: { display: false }
+            },
+            maintainAspectRatio: false
+        }
+    });
+}
+
+function renderCvssDistributionChart(scoreDistribution, stats, metricVersion, isDdosOnly) {
+    const ctx = document.getElementById('cvssDistributionChart');
+    if (!ctx) return;
+
+    // Create labels and data arrays
+    const labels = scoreDistribution.map(item => item.range);
+    const counts = scoreDistribution.map(item => item.count);
+    
+    // Create colors based on CVSS score ranges (similar to severity colors)
+    const backgroundColors = scoreDistribution.map(item => {
+        const minScore = item.minScore;
+        if (minScore >= 9) return 'rgba(220, 53, 69, 0.8)'; // Critical (Red)
+        if (minScore >= 7) return 'rgba(255, 193, 7, 0.8)'; // High (Orange/Yellow)
+        if (minScore >= 4) return 'rgba(255, 165, 0, 0.8)'; // Medium (Orange)
+        if (minScore >= 0.1) return 'rgba(40, 167, 69, 0.8)'; // Low (Green)
+        return 'rgba(108, 117, 125, 0.8)'; // None/Unknown (Gray)
+    });
+    
+    const borderColors = scoreDistribution.map(item => {
+        const minScore = item.minScore;
+        if (minScore >= 9) return 'rgba(220, 53, 69, 1)';
+        if (minScore >= 7) return 'rgba(255, 193, 7, 1)';
+        if (minScore >= 4) return 'rgba(255, 165, 0, 1)';
+        if (minScore >= 0.1) return 'rgba(40, 167, 69, 1)';
+        return 'rgba(108, 117, 125, 1)';
+    });
+
+    if (cvssDistributionChartInstance) {
+        cvssDistributionChartInstance.destroy();
+    }
+
+    cvssDistributionChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: isDdosOnly ? 'DDoS-related CVEs' : 'All CVEs',
+                data: counts,
+                backgroundColor: backgroundColors,
+                borderColor: borderColors,
+                borderWidth: 1,
+                borderRadius: 4,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        color: '#ffffff',
+                        font: {
+                            size: 12,
+                            weight: 'bold'
+                        },
+                        padding: 20
+                    }
+                },
+                title: {
+                    display: true,
+                    text: `CVSS Score Distribution (${metricVersion.toUpperCase()}) - ${isDdosOnly ? 'DDoS-related CVEs' : 'All CVEs'}`,
+                    color: '#ffffff',
+                    font: {
+                        size: 14,
+                        weight: 'bold'
+                    },
+                    padding: {
+                        top: 10,
+                        bottom: 20
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#ffffff',
+                    bodyColor: '#ffffff',
+                    borderColor: '#ffffff',
+                    borderWidth: 1,
+                    callbacks: {
+                        title: function(tooltipItems) {
+                            const item = tooltipItems[0];
+                            return `CVSS Score Range: ${item.label}`;
+                        },
+                        label: function(context) {
+                            const count = context.parsed.y;
+                            const total = counts.reduce((sum, val) => sum + val, 0);
+                            const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
+                            return `${context.dataset.label}: ${count} CVEs (${percentage}%)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'CVSS Score Range',
+                        color: '#ffffff',
+                        font: {
+                            size: 12,
+                            weight: 'bold'
+                        }
+                    },
+                    ticks: {
+                        color: '#ffffff',
+                        font: {
+                            size: 10
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Number of CVEs',
+                        color: '#ffffff',
+                        font: {
+                            size: 12,
+                            weight: 'bold'
+                        }
+                    },
+                    ticks: {
+                        color: '#ffffff',
+                        font: {
+                            size: 10
+                        },
+                        beginAtZero: true
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                }
+            },
+            layout: { 
+                padding: 10 
+            },
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            }
+        }
+    });
+}
+
+// Update CVSS statistics display
+function updateCvssStats(stats) {
+    const totalElement = document.getElementById('cvssStatTotal');
+    const averageElement = document.getElementById('cvssStatAverage');
+    const medianElement = document.getElementById('cvssStatMedian');
+    const rangeElement = document.getElementById('cvssStatRange');
+    
+    if (totalElement) totalElement.textContent = stats.totalEntries.toLocaleString();
+    if (averageElement) averageElement.textContent = stats.averageScore.toFixed(1);
+    if (medianElement) medianElement.textContent = stats.medianScore.toFixed(1);
+    if (rangeElement) rangeElement.textContent = `${stats.minScore.toFixed(1)} - ${stats.maxScore.toFixed(1)}`;
 }
 
 // CVE Search functionality

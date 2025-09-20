@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { CVE } from '../types/cve';
 import { getSeveritiesDistribution, getMetricVersionStats, getYearlyCveTrends, getYearlyDdosTrends } from '../queries/getSeveritiesDistribution';
 import { getCweStatistics } from '../queries/getCweStatistics';
+import { getCvssScoreDistribution, getCvssScoreStats } from '../queries/getCvssScoreDistribution';
 import { MetricVersion } from '../scripts/extractTableEntriesFromJson';
 
 const router = Router();
@@ -471,6 +472,53 @@ router.get('/stats/cwe', async (req, res) => {
   } catch (error: any) {
     console.error('Error getting CWE statistics:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get CWE statistics' });
+  }
+});
+
+// GET CVSS score distribution from SQLite (defaults to CVSS 3.1)
+router.get('/stats/cvss-distribution', async (req, res) => {
+  try {
+    const metricParam = (req.query.metricVersion as string) || '3.1';
+    const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
+    const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
+    
+    const statusParam = (req.query.statusFilter as string) || 'accepted';
+    const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
+    const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
+    
+    const ddosOnlyParam = req.query.ddosOnly as string;
+    const isDdosRelated = ddosOnlyParam === 'true' ? true : undefined; // Show all by default, filter to DDoS only if requested
+    
+    // Map database values to MetricVersion enum
+    const versionMapping: Record<string, MetricVersion> = {
+      '2.0': MetricVersion.V20,
+      '3.0': MetricVersion.V30,
+      '3.1': MetricVersion.V31,
+      '4.0': MetricVersion.V40
+    };
+    
+    const [scoreDistribution, scoreStats] = await Promise.all([
+      getCvssScoreDistribution(versionMapping[versionValue], undefined, statusValue, isDdosRelated),
+      getCvssScoreStats(versionMapping[versionValue], undefined, statusValue, isDdosRelated)
+    ]);
+    
+    res.json({ 
+      success: true, 
+      metricVersion: versionValue, 
+      statusFilter: statusValue,
+      ddosOnly: ddosOnlyParam === 'true',
+      scoreDistribution,
+      stats: {
+        totalEntries: scoreStats.totalEntries,
+        averageScore: scoreStats.averageScore,
+        medianScore: scoreStats.medianScore,
+        minScore: scoreStats.minScore,
+        maxScore: scoreStats.maxScore
+      }
+    });
+  } catch (error: any) {
+    console.error('Error getting CVSS score distribution:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to get CVSS score distribution' });
   }
 });
 

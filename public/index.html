@@ -96,6 +96,37 @@
                 </div>
             </div>
 
+            <div class="card cvss-distribution-widget">
+                <h3 class="widget-title">📊 CVSS Score Distribution</h3>
+                <div class="cvss-distribution-controls">
+                    <label class="cvss-toggle">
+                        <input type="checkbox" id="cvssShowAllToggle" checked>
+                        <span class="cvss-toggle-text">Show All CVEs (uncheck for DDoS only)</span>
+                    </label>
+                </div>
+                <div class="widget-canvas-wrap">
+                    <canvas id="cvssDistributionChart"></canvas>
+                </div>
+                <div class="cvss-stats-summary">
+                    <div class="cvss-stat">
+                        <span class="cvss-stat-label">Total:</span>
+                        <span id="cvssStatTotal">0</span>
+                    </div>
+                    <div class="cvss-stat">
+                        <span class="cvss-stat-label">Average:</span>
+                        <span id="cvssStatAverage">0.0</span>
+                    </div>
+                    <div class="cvss-stat">
+                        <span class="cvss-stat-label">Median:</span>
+                        <span id="cvssStatMedian">0.0</span>
+                    </div>
+                    <div class="cvss-stat">
+                        <span class="cvss-stat-label">Range:</span>
+                        <span id="cvssStatRange">0.0 - 0.0</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="filters-section">
                 <div class="filter-container">
                     <label for="yearFilter" class="filter-label">Filter by Year:</label>
