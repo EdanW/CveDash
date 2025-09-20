@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadCVEsOnce();
     initSeverityChart();
     initYearlyTrendsChart();
+    initCWEWidget();
 });
 
 // Load CVEs once on page load from database
@@ -245,12 +246,13 @@ function updateStatsFromLocalData() {
 
 
 async function refreshData() {
-    // Refresh the pie chart, yearly trends chart, stats, and DDoS CVEs with current metric version
+    // Refresh the pie chart, yearly trends chart, stats, DDoS CVEs, and CWE widget with current metric version
     await Promise.all([
         showSeverityDistribution(),
         showYearlyTrends(),
         updateStats(),
-        loadDDoSCVEs()
+        loadDDoSCVEs(),
+        initCWEWidget()
     ]);
 }
 
@@ -1026,5 +1028,92 @@ function initSeverityLevelFilter() {
             displayCVEs();
         });
     });
+}
+
+// Initialize CWE Widget with real data from API
+async function initCWEWidget() {
+    const cweListContent = document.getElementById('cweListContent');
+    
+    try {
+        // Show loading state
+        cweListContent.innerHTML = `
+            <div class="cwe-placeholder">
+                <p>📋 Loading CWE data...</p>
+            </div>
+        `;
+        
+        // Get current status filter (but not metric version - we want all metric versions for CWE stats)
+        const statusParam = selectedStatusFilter !== 'accepted' ? `&statusFilter=${encodeURIComponent(selectedStatusFilter)}` : '';
+        
+        // Fetch CWE statistics from API (without metric version filter to get all versions)
+        const response = await fetch(`/api/cves/stats/cwe?${statusParam}&limit=5`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.cweStats && data.cweStats.length > 0) {
+                // Create the CWE list HTML with real data
+                const cweListHTML = `
+                    <ul class="cwe-list">
+                        ${data.cweStats.map(cwe => `
+                            <li class="cwe-item">
+                                <div class="cwe-info">
+                                    <div class="cwe-id">${cwe.cweId}</div>
+                                    <div class="cwe-name">${getCweDescription(cwe.cweId)}</div>
+                                </div>
+                                <div class="cwe-count">${cwe.count}</div>
+                            </li>
+                        `).join('')}
+                    </ul>
+                `;
+                
+                cweListContent.innerHTML = cweListHTML;
+            } else {
+                // No CWE data available
+                cweListContent.innerHTML = `
+                    <div class="cwe-placeholder">
+                        <p>📋 No CWE data available</p>
+                    </div>
+                `;
+            }
+        } else {
+            throw new Error(`HTTP error: ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Error loading CWE statistics:', error);
+        // Show error state
+        cweListContent.innerHTML = `
+            <div class="cwe-placeholder">
+                <p>❌ Failed to load CWE data</p>
+            </div>
+        `;
+    }
+}
+
+// Helper function to get CWE descriptions (common CWEs)
+function getCweDescription(cweId) {
+    const cweDescriptions = {
+        'CWE-79': 'Cross-site Scripting (XSS)',
+        'CWE-89': 'SQL Injection',
+        'CWE-20': 'Improper Input Validation',
+        'CWE-200': 'Information Exposure',
+        'CWE-352': 'Cross-Site Request Forgery',
+        'CWE-22': 'Path Traversal',
+        'CWE-78': 'OS Command Injection',
+        'CWE-434': 'Unrestricted Upload of File',
+        'CWE-862': 'Missing Authorization',
+        'CWE-863': 'Incorrect Authorization',
+        'CWE-94': 'Code Injection',
+        'CWE-416': 'Use After Free',
+        'CWE-787': 'Out-of-bounds Write',
+        'CWE-476': 'NULL Pointer Dereference',
+        'CWE-190': 'Integer Overflow or Wraparound',
+        'CWE-119': 'Buffer Overflow',
+        'CWE-125': 'Out-of-bounds Read',
+        'CWE-399': 'Resource Management Errors',
+        'CWE-362': 'Concurrent Execution using Shared Resource',
+        'CWE-400': 'Uncontrolled Resource Consumption'
+    };
+    
+    return cweDescriptions[cweId] || 'Unknown CWE';
 }
 

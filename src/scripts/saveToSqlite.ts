@@ -791,6 +791,94 @@ export class CveSqliteManager {
       });
     });
   }
+
+  /**
+   * Get CWE statistics for DDoS-related entries
+   * Returns count of unique CWE IDs from DDoS-related CVEs
+   */
+  async getCweStatistics(options: {
+    metricVersion?: string;
+    publishedAfter?: string;
+    publishedBefore?: string;
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
+    limit?: number;
+  } = {}): Promise<Array<{ cweId: string; count: number }>> {
+    await this.openDatabase();
+
+    const { metricVersion, publishedAfter, publishedBefore, statusFilter, limit = 5 } = options;
+
+    let whereClause = ' WHERE isDdosRelated = 1 AND cweIds IS NOT NULL AND cweIds != \'\' AND cweIds != \'[]\'';
+    const params: any[] = [];
+
+    if (metricVersion) {
+      whereClause += ' AND metricVersion = ?';
+      params.push(metricVersion);
+    }
+
+    if (publishedAfter) {
+      whereClause += ' AND published >= ?';
+      params.push(publishedAfter);
+    }
+
+    if (publishedBefore) {
+      whereClause += ' AND published <= ?';
+      params.push(publishedBefore);
+    }
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += ' AND (vulnStatus = ? OR vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified', 'Deferred');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += ' AND vulnStatus != ?';
+      params.push('Rejected');
+    }
+
+    const query = `
+      SELECT cweIds
+      FROM ${this.tableName}
+      ${whereClause}
+    `;
+
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.all(query, params, (err: Error | null, rows: any[]) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        // Count CWE IDs across all entries
+        const cweCounts: { [cweId: string]: number } = {};
+        
+        rows.forEach(row => {
+          try {
+            const cweIds: string[] = JSON.parse(row.cweIds);
+            cweIds.forEach(cweId => {
+              if (cweId && typeof cweId === 'string' && cweId !== 'NVD-CWE-Other') {
+                cweCounts[cweId] = (cweCounts[cweId] || 0) + 1;
+              }
+            });
+          } catch (parseError) {
+            // Skip invalid JSON entries
+            console.warn('Failed to parse CWE IDs:', row.cweIds);
+          }
+        });
+
+        // Convert to array and sort by count (descending)
+        const result = Object.entries(cweCounts)
+          .map(([cweId, count]) => ({ cweId, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, limit);
+
+        resolve(result);
+      });
+    });
+  }
 }
 
 /**
