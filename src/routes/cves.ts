@@ -284,6 +284,10 @@ router.get('/stats/severity', async (req, res) => {
     const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
     const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
     
+    const statusParam = (req.query.statusFilter as string) || 'accepted';
+    const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
+    const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
+    
     // Map database values to MetricVersion enum
     const versionMapping: Record<string, MetricVersion> = {
       '2.0': MetricVersion.V20,
@@ -292,8 +296,8 @@ router.get('/stats/severity', async (req, res) => {
       '4.0': MetricVersion.V40
     };
     
-    const distribution = await getSeveritiesDistribution(versionMapping[versionValue]);
-    res.json({ success: true, metricVersion: versionValue, distribution });
+    const distribution = await getSeveritiesDistribution(versionMapping[versionValue], undefined, statusValue);
+    res.json({ success: true, metricVersion: versionValue, statusFilter: statusValue, distribution });
   } catch (error: any) {
     console.error('Error getting severity distribution:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get severity distribution' });
@@ -307,6 +311,10 @@ router.get('/stats/yearly-trends', async (req, res) => {
     const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
     const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
     
+    const statusParam = (req.query.statusFilter as string) || 'accepted';
+    const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
+    const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
+    
     // Map database values to MetricVersion enum
     const versionMapping: Record<string, MetricVersion> = {
       '2.0': MetricVersion.V20,
@@ -315,8 +323,8 @@ router.get('/stats/yearly-trends', async (req, res) => {
       '4.0': MetricVersion.V40
     };
     
-    const yearlyData = await getYearlyCveTrends(versionMapping[versionValue]);
-    res.json({ success: true, metricVersion: versionValue, yearlyData });
+    const yearlyData = await getYearlyCveTrends(versionMapping[versionValue], undefined, statusValue);
+    res.json({ success: true, metricVersion: versionValue, statusFilter: statusValue, yearlyData });
   } catch (error: any) {
     console.error('Error getting yearly CVE trends:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get yearly CVE trends' });
@@ -330,6 +338,10 @@ router.get('/stats/yearly-ddos-trends', async (req, res) => {
     const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
     const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
     
+    const statusParam = (req.query.statusFilter as string) || 'accepted';
+    const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
+    const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
+    
     // Map database values to MetricVersion enum
     const versionMapping: Record<string, MetricVersion> = {
       '2.0': MetricVersion.V20,
@@ -338,8 +350,8 @@ router.get('/stats/yearly-ddos-trends', async (req, res) => {
       '4.0': MetricVersion.V40
     };
     
-    const yearlyDdosData = await getYearlyDdosTrends(versionMapping[versionValue]);
-    res.json({ success: true, metricVersion: versionValue, yearlyDdosData });
+    const yearlyDdosData = await getYearlyDdosTrends(versionMapping[versionValue], undefined, statusValue);
+    res.json({ success: true, metricVersion: versionValue, statusFilter: statusValue, yearlyDdosData });
   } catch (error: any) {
     console.error('Error getting yearly DDoS trends:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get yearly DDoS trends' });
@@ -353,8 +365,11 @@ router.get('/sample/ddos', async (req, res) => {
     const metricParam = (req.query.metricVersion as string) || '3.1';
     const yearParam = req.query.year as string;
     const minScoreParam = req.query.minScore as string;
+    const statusParam = (req.query.statusFilter as string) || 'accepted';
     const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
     const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
+    const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
+    const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
     
     // Load CVE data from the SQLite database
     const { CveSqliteManager } = await import('../scripts/saveToSqlite');
@@ -364,7 +379,8 @@ router.get('/sample/ddos', async (req, res) => {
     const queryOptions: any = { 
       isDdosRelated: true,
       metricVersion: versionValue,
-      limit: limit
+      limit: limit,
+      statusFilter: statusValue
     };
     
     // Add year filter if specified

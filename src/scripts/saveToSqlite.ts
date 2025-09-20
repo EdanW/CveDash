@@ -339,8 +339,9 @@ export class CveSqliteManager {
     isDdosRelated?: boolean;
     publishedAfter?: string;
     publishedBefore?: string;
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
   } = {}): Promise<TableEntry[]> {
-    const { limit = 100, offset = 0, severity, minScore, maxScore, id, metricVersion, isDdosRelated, publishedAfter, publishedBefore } = options;
+    const { limit = 100, offset = 0, severity, minScore, maxScore, id, metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
 
     await this.openDatabase();
 
@@ -385,6 +386,15 @@ export class CveSqliteManager {
     if (publishedBefore) {
       whereClause += whereClause ? ' AND published <= ?' : ' WHERE published <= ?';
       params.push(publishedBefore);
+    }
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += whereClause ? ' AND (vulnStatus = ? OR vulnStatus = ?)' : ' WHERE (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += whereClause ? ' AND vulnStatus != ?' : ' WHERE vulnStatus != ?';
+      params.push('Rejected');
     }
 
     const query = `
@@ -494,10 +504,292 @@ export class CveSqliteManager {
   }
 
   /**
+   * Get yearly CVE trends with unique CVE counting at SQL level
+   * Returns count of unique CVEs per year regardless of metric version
+   */
+  async getYearlyCveTrends(options: {
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
+  } = {}): Promise<Record<string, number>> {
+    await this.openDatabase();
+
+    const { statusFilter } = options;
+    
+    let whereClause = `WHERE published IS NOT NULL
+        AND published != ''
+        AND CAST(strftime('%Y', published) AS INTEGER) BETWEEN 1998 AND 2025`;
+    const params: any[] = [];
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += ' AND (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += ' AND vulnStatus != ?';
+      params.push('Rejected');
+    }
+
+    const query = `
+      SELECT 
+        CAST(strftime('%Y', published) AS TEXT) as year,
+        COUNT(DISTINCT SUBSTR(id, 1, CASE WHEN id LIKE 'CVE-%' THEN LENGTH(id) ELSE LENGTH(id) END)) as count
+      FROM ${this.tableName}
+      ${whereClause}
+      GROUP BY strftime('%Y', published)
+      ORDER BY year
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db!.all(query, params, (err, rows: any[]) => {
+        if (err) {
+          reject(err);
+        } else {
+          const yearlyData: Record<string, number> = {};
+          
+          // Initialize all years 1998-2025 with 0
+          for (let year = 1998; year <= 2025; year++) {
+            yearlyData[year.toString()] = 0;
+          }
+          
+          // Fill in actual data
+          rows.forEach(row => {
+            if (row.year) {
+              yearlyData[row.year] = row.count || 0;
+            }
+          });
+          
+          resolve(yearlyData);
+        }
+      });
+    });
+  }
+
+  /**
+   * Get yearly DDoS CVE trends with unique CVE counting at SQL level
+   * Returns count of unique DDoS-related CVEs per year regardless of metric version
+   */
+  async getYearlyDdosTrends(options: {
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
+  } = {}): Promise<Record<string, number>> {
+    await this.openDatabase();
+
+    const { statusFilter } = options;
+    
+    let whereClause = `WHERE published IS NOT NULL
+        AND published != ''
+        AND isDdosRelated = 1
+        AND CAST(strftime('%Y', published) AS INTEGER) BETWEEN 1998 AND 2025`;
+    const params: any[] = [];
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += ' AND (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += ' AND vulnStatus != ?';
+      params.push('Rejected');
+    }
+
+    const query = `
+      SELECT 
+        CAST(strftime('%Y', published) AS TEXT) as year,
+        COUNT(DISTINCT SUBSTR(id, 1, CASE WHEN id LIKE 'CVE-%' THEN LENGTH(id) ELSE LENGTH(id) END)) as count
+      FROM ${this.tableName}
+      ${whereClause}
+      GROUP BY strftime('%Y', published)
+      ORDER BY year
+    `;
+
+    return new Promise((resolve, reject) => {
+      this.db!.all(query, params, (err, rows: any[]) => {
+        if (err) {
+          reject(err);
+        } else {
+          const yearlyData: Record<string, number> = {};
+          
+          // Initialize all years 1998-2025 with 0
+          for (let year = 1998; year <= 2025; year++) {
+            yearlyData[year.toString()] = 0;
+          }
+          
+          // Fill in actual data
+          rows.forEach(row => {
+            if (row.year) {
+              yearlyData[row.year] = row.count || 0;
+            }
+          });
+          
+          resolve(yearlyData);
+        }
+      });
+    });
+  }
+
+  /**
    * Close the database connection (call this when done)
    */
   async close(): Promise<void> {
     await this.closeDatabase();
+  }
+
+  /**
+   * Get severity distribution with SQL-level grouping for better performance
+   * Returns count of entries grouped by severity for a specific metric version
+   */
+  async getSeverityDistribution(options: {
+    metricVersion?: string;
+    isDdosRelated?: boolean;
+    publishedAfter?: string;
+    publishedBefore?: string;
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
+  } = {}): Promise<Record<string, number>> {
+    await this.openDatabase();
+
+    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+
+    let whereClause = '';
+    const params: any[] = [];
+
+    if (metricVersion) {
+      whereClause += ' WHERE metricVersion = ?';
+      params.push(metricVersion);
+    }
+
+    if (isDdosRelated !== undefined) {
+      whereClause += whereClause ? ' AND isDdosRelated = ?' : ' WHERE isDdosRelated = ?';
+      params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (publishedAfter) {
+      whereClause += whereClause ? ' AND published >= ?' : ' WHERE published >= ?';
+      params.push(publishedAfter);
+    }
+
+    if (publishedBefore) {
+      whereClause += whereClause ? ' AND published <= ?' : ' WHERE published <= ?';
+      params.push(publishedBefore);
+    }
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      // Only show Analyzed and Modified status
+      whereClause += whereClause ? ' AND (vulnStatus = ? OR vulnStatus = ?)' : ' WHERE (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      // Show Received, Awaiting Analysis, Undergoing Analysis, Analyzed, and Modified (exclude Rejected)
+      whereClause += whereClause ? ' AND vulnStatus != ?' : ' WHERE vulnStatus != ?';
+      params.push('Rejected');
+    }
+    // 'all' filter doesn't add any WHERE clause - shows everything including rejected
+
+    const query = `
+      SELECT 
+        COALESCE(baseSeverity, 'UNKNOWN') as severity,
+        COUNT(*) as count
+      FROM ${this.tableName}
+      ${whereClause}
+      GROUP BY COALESCE(baseSeverity, 'UNKNOWN')
+      ORDER BY 
+        CASE COALESCE(baseSeverity, 'UNKNOWN')
+          WHEN 'CRITICAL' THEN 1
+          WHEN 'HIGH' THEN 2
+          WHEN 'MEDIUM' THEN 3
+          WHEN 'LOW' THEN 4
+          WHEN 'UNKNOWN' THEN 5
+          ELSE 6
+        END
+    `;
+
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.all(query, params, (err: Error | null, rows: any[]) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const distribution: Record<string, number> = {};
+        rows.forEach(row => {
+          distribution[row.severity] = row.count;
+        });
+
+        resolve(distribution);
+      });
+    });
+  }
+
+  /**
+   * Get average base score with SQL-level calculation for better performance
+   * Returns the average base score for entries matching the given criteria
+   */
+  async getAverageBaseScore(options: {
+    metricVersion?: string;
+    isDdosRelated?: boolean;
+    publishedAfter?: string;
+    publishedBefore?: string;
+    statusFilter?: 'accepted' | 'open-accepted' | 'all';
+  } = {}): Promise<number> {
+    await this.openDatabase();
+
+    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+
+    let whereClause = 'WHERE baseScore IS NOT NULL AND baseScore >= 0';
+    const params: any[] = [];
+
+    if (metricVersion) {
+      whereClause += ' AND metricVersion = ?';
+      params.push(metricVersion);
+    }
+
+    if (isDdosRelated !== undefined) {
+      whereClause += ' AND isDdosRelated = ?';
+      params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (publishedAfter) {
+      whereClause += ' AND published >= ?';
+      params.push(publishedAfter);
+    }
+
+    if (publishedBefore) {
+      whereClause += ' AND published <= ?';
+      params.push(publishedBefore);
+    }
+
+    // Add status filtering
+    if (statusFilter === 'accepted') {
+      whereClause += ' AND (vulnStatus = ? OR vulnStatus = ?)';
+      params.push('Analyzed', 'Modified');
+    } else if (statusFilter === 'open-accepted') {
+      whereClause += ' AND vulnStatus != ?';
+      params.push('Rejected');
+    }
+
+    const query = `
+      SELECT AVG(baseScore) as averageScore
+      FROM ${this.tableName}
+      ${whereClause}
+    `;
+
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.get(query, params, (err: Error | null, row: any) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const averageScore = row?.averageScore || 0;
+        resolve(Math.round(averageScore * 100) / 100); // Round to 2 decimal places
+      });
+    });
   }
 }
 

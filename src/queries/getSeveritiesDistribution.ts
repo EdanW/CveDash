@@ -10,26 +10,19 @@ import * as path from 'path';
  */
 export async function getSeveritiesDistribution(
   metricVersion: MetricVersion,
-  dbPath?: string
+  dbPath?: string,
+  statusFilter?: 'accepted' | 'open-accepted' | 'all'
 ): Promise<Record<string, number>> {
   const databasePath = dbPath || path.resolve(process.cwd(), 'cve_database.db');
   const manager = new CveSqliteManager(databasePath);
 
   try {
-    // Query entries with the specific metric version and DDoS filter directly from the database
-    const entries = await manager.queryEntries({ 
+    // Use SQL-level grouping for better performance
+    const distribution = await manager.getSeverityDistribution({
       metricVersion: metricVersion,
       isDdosRelated: true, // Get DDoS-related CVEs only
-      limit: 1000000 // Use a very large limit to get all entries
+      statusFilter: statusFilter || 'accepted' // Default to accepted only
     });
-    
-    // Count severities
-    const distribution: Record<string, number> = {};
-    
-    for (const entry of entries) {
-      const severity = entry.baseSeverity || 'UNKNOWN';
-      distribution[severity] = (distribution[severity] || 0) + 1;
-    }
 
     return distribution;
 
@@ -50,7 +43,8 @@ export async function getSeveritiesDistribution(
 export async function getMetricVersionStats(
   metricVersion: MetricVersion,
   dbPath?: string,
-  isDdosRelated?: boolean
+  isDdosRelated?: boolean,
+  statusFilter?: 'accepted' | 'open-accepted' | 'all'
 ): Promise<{
   metricVersion: MetricVersion;
   totalEntries: number;
@@ -61,14 +55,17 @@ export async function getMetricVersionStats(
   const manager = new CveSqliteManager(databasePath);
 
   try {
-    // Query entries with the specific metric version and optional DDoS filter directly from the database
-    const entries = await manager.queryEntries({ 
+    // Use SQL-level grouping for severity distribution
+    const severityDistribution = await manager.getSeverityDistribution({
       metricVersion: metricVersion,
-      isDdosRelated: isDdosRelated, // Filter by DDoS-related status if specified
-      limit: 1000000 // Use a very large limit to get all entries
+      isDdosRelated: isDdosRelated,
+      statusFilter: statusFilter || 'accepted'
     });
 
-    if (entries.length === 0) {
+    // Calculate total entries from the distribution
+    const totalEntries = Object.values(severityDistribution).reduce((sum, count) => sum + count, 0);
+
+    if (totalEntries === 0) {
       return {
         metricVersion,
         totalEntries: 0,
@@ -77,26 +74,18 @@ export async function getMetricVersionStats(
       };
     }
 
-    // Calculate statistics
-    const severityDistribution: Record<string, number> = {};
-    const scores: number[] = [];
-
-    for (const entry of entries) {
-      const severity = entry.baseSeverity || 'UNKNOWN';
-      severityDistribution[severity] = (severityDistribution[severity] || 0) + 1;
-      
-      if (typeof entry.baseScore === 'number' && entry.baseScore >= 0) {
-        scores.push(entry.baseScore);
-      }
-    }
-
-    const averageScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+    // Use SQL-level calculation for average score as well
+    const averageScore = await manager.getAverageBaseScore({
+      metricVersion: metricVersion,
+      isDdosRelated: isDdosRelated,
+      statusFilter: statusFilter || 'accepted'
+    });
 
     return {
       metricVersion,
-      totalEntries: entries.length,
+      totalEntries,
       severityDistribution,
-      averageScore: Math.round(averageScore * 100) / 100 // Round to 2 decimal places
+      averageScore // Already rounded in the SQL method
     };
 
   } catch (error) {
@@ -133,50 +122,25 @@ export async function exampleUsage() {
 }
 
 /**
- * Gets yearly CVE distribution for a specific metric version (all CVEs, not just DDoS)
- * @param metricVersion - The CVSS metric version to filter by
+ * Gets yearly CVE distribution counting unique CVEs regardless of metric version
+ * Uses optimized SQL query to handle uniqueness at database level
+ * @param metricVersion - The CVSS metric version (kept for API compatibility, but not used for filtering)
  * @param dbPath - Optional path to the database file (defaults to cve_database.db)
- * @returns Promise<Record<string, number>> - Object with year as key and count as value
+ * @returns Promise<Record<string, number>> - Object with year as key and unique CVE count as value
  */
 export async function getYearlyCveTrends(
   metricVersion: MetricVersion,
-  dbPath?: string
+  dbPath?: string,
+  statusFilter?: 'accepted' | 'open-accepted' | 'all'
 ): Promise<Record<string, number>> {
   const databasePath = dbPath || path.resolve(process.cwd(), 'cve_database.db');
   const manager = new CveSqliteManager(databasePath);
 
   try {
-    // Query entries with the specific metric version (all CVEs, not just DDoS)
-    const entries = await manager.queryEntries({ 
-      metricVersion: metricVersion,
-      limit: 1000000 // Use a very large limit to get all entries
+    // Use optimized SQL query that handles uniqueness at database level
+    const yearlyDistribution = await manager.getYearlyCveTrends({
+      statusFilter: statusFilter || 'accepted'
     });
-    
-    // Count CVEs by year (2002-2025)
-    const yearlyDistribution: Record<string, number> = {};
-    
-    // Initialize all years from 2002 to 2025 with 0
-    for (let year = 2002; year <= 2025; year++) {
-      yearlyDistribution[year.toString()] = 0;
-    }
-    
-    for (const entry of entries) {
-      if (entry.published) {
-        try {
-          const publishedDate = new Date(entry.published);
-          const year = publishedDate.getFullYear().toString();
-          
-          // Only count years in our range
-          if (yearlyDistribution.hasOwnProperty(year)) {
-            yearlyDistribution[year] = (yearlyDistribution[year] || 0) + 1;
-          }
-        } catch (error) {
-          // Skip entries with invalid dates
-          console.warn(`Invalid date format for entry ${entry.id}: ${entry.published}`);
-        }
-      }
-    }
-
     return yearlyDistribution;
 
   } catch (error) {
@@ -188,51 +152,25 @@ export async function getYearlyCveTrends(
 }
 
 /**
- * Gets yearly DDoS-related CVE distribution for a specific metric version
- * @param metricVersion - The CVSS metric version to filter by
+ * Gets yearly DDoS-related CVE distribution counting unique CVEs regardless of metric version
+ * Uses optimized SQL query to handle uniqueness at database level
+ * @param metricVersion - The CVSS metric version (kept for API compatibility, but not used for filtering)
  * @param dbPath - Optional path to the database file (defaults to cve_database.db)
- * @returns Promise<Record<string, number>> - Object with year as key and count as value
+ * @returns Promise<Record<string, number>> - Object with year as key and unique DDoS CVE count as value
  */
 export async function getYearlyDdosTrends(
   metricVersion: MetricVersion,
-  dbPath?: string
+  dbPath?: string,
+  statusFilter?: 'accepted' | 'open-accepted' | 'all'
 ): Promise<Record<string, number>> {
   const databasePath = dbPath || path.resolve(process.cwd(), 'cve_database.db');
   const manager = new CveSqliteManager(databasePath);
 
   try {
-    // Query entries with the specific metric version and DDoS filter
-    const entries = await manager.queryEntries({ 
-      metricVersion: metricVersion,
-      isDdosRelated: true, // Only DDoS-related CVEs
-      limit: 1000000 // Use a very large limit to get all entries
+    // Use optimized SQL query that handles uniqueness at database level
+    const yearlyDistribution = await manager.getYearlyDdosTrends({
+      statusFilter: statusFilter || 'accepted'
     });
-    
-    // Count DDoS CVEs by year (2002-2025)
-    const yearlyDistribution: Record<string, number> = {};
-    
-    // Initialize all years from 2002 to 2025 with 0
-    for (let year = 2002; year <= 2025; year++) {
-      yearlyDistribution[year.toString()] = 0;
-    }
-    
-    for (const entry of entries) {
-      if (entry.published) {
-        try {
-          const publishedDate = new Date(entry.published);
-          const year = publishedDate.getFullYear().toString();
-          
-          // Only count years in our range
-          if (yearlyDistribution.hasOwnProperty(year)) {
-            yearlyDistribution[year] = (yearlyDistribution[year] || 0) + 1;
-          }
-        } catch (error) {
-          // Skip entries with invalid dates
-          console.warn(`Invalid date format for entry ${entry.id}: ${entry.published}`);
-        }
-      }
-    }
-
     return yearlyDistribution;
 
   } catch (error) {

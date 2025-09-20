@@ -9,15 +9,25 @@
 <body>
     <div class="container">
         <div class="header">
-            <div class="metric-toggle" aria-label="Select metric version">
-                <label for="metricVersionSelect" class="metric-toggle__label">Metric:</label>
-                <select id="metricVersionSelect" class="metric-toggle__select">
-                    <option value="latest" selected>Latest</option>
-                    <option value="v2">CVSS v2</option>
-                    <option value="v3.0">CVSS v3.0</option>
-                    <option value="v3.1">CVSS v3.1</option>
-                    <option value="v4.0">CVSS v4.0</option>
-                </select>
+            <div class="header-controls">
+                <div class="metric-toggle" aria-label="Select metric version">
+                    <label for="metricVersionSelect" class="metric-toggle__label">Metric:</label>
+                    <select id="metricVersionSelect" class="metric-toggle__select">
+                        <option value="latest" selected>Latest</option>
+                        <option value="v2">CVSS v2</option>
+                        <option value="v3.0">CVSS v3.0</option>
+                        <option value="v3.1">CVSS v3.1</option>
+                        <option value="v4.0">CVSS v4.0</option>
+                    </select>
+                </div>
+                <div class="status-toggle" aria-label="Select vulnerability status filter">
+                    <label for="statusFilterSelect" class="status-toggle__label">Status:</label>
+                    <select id="statusFilterSelect" class="status-toggle__select">
+                        <option value="accepted" selected>Only Accepted</option>
+                        <option value="open-accepted">Open & Accepted</option>
+                        <option value="all">All (Including Rejected)</option>
+                    </select>
+                </div>
             </div>
             <h1>🛡️ CVE Dashboard</h1>
             <p>Monitor and manage DDoS-related vulnerabilities</p>
