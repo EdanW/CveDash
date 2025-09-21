@@ -290,6 +290,10 @@ router.get('/stats/severity', async (req, res) => {
     const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
     const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
     
+    const ddosCertaintyParam = req.query.ddosCertainty as string;
+    const validDdosCertainty = new Set(['LOW', 'MEDIUM', 'HIGH']);
+    const ddosCertaintyValue = validDdosCertainty.has(ddosCertaintyParam) ? ddosCertaintyParam as 'LOW' | 'MEDIUM' | 'HIGH' : undefined;
+    
     // Map database values to MetricVersion enum
     const versionMapping: Record<string, MetricVersion> = {
       '2.0': MetricVersion.V20,
@@ -298,8 +302,8 @@ router.get('/stats/severity', async (req, res) => {
       '4.0': MetricVersion.V40
     };
     
-    const distribution = await getSeveritiesDistribution(versionMapping[versionValue], undefined, statusValue);
-    res.json({ success: true, metricVersion: versionValue, statusFilter: statusValue, distribution });
+    const distribution = await getSeveritiesDistribution(versionMapping[versionValue], undefined, statusValue, ddosCertaintyValue);
+    res.json({ success: true, metricVersion: versionValue, statusFilter: statusValue, ddosCertainty: ddosCertaintyParam, distribution });
   } catch (error: any) {
     console.error('Error getting severity distribution:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get severity distribution' });
@@ -317,6 +321,10 @@ router.get('/stats/yearly-trends', async (req, res) => {
     const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
     const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
     
+    const ddosCertaintyParam = req.query.ddosCertainty as string;
+    const validDdosCertainty = new Set(['LOW', 'MEDIUM', 'HIGH']);
+    const ddosCertaintyValue = validDdosCertainty.has(ddosCertaintyParam) ? ddosCertaintyParam as 'LOW' | 'MEDIUM' | 'HIGH' : undefined;
+    
     // Map database values to MetricVersion enum
     const versionMapping: Record<string, MetricVersion> = {
       '2.0': MetricVersion.V20,
@@ -326,7 +334,7 @@ router.get('/stats/yearly-trends', async (req, res) => {
     };
     
     const yearlyData = await getYearlyCveTrends(versionMapping[versionValue], undefined, statusValue);
-    res.json({ success: true, metricVersion: versionValue, statusFilter: statusValue, yearlyData });
+    res.json({ success: true, metricVersion: versionValue, statusFilter: statusValue, ddosCertainty: ddosCertaintyParam, yearlyData });
   } catch (error: any) {
     console.error('Error getting yearly CVE trends:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get yearly CVE trends' });
@@ -344,6 +352,10 @@ router.get('/stats/yearly-ddos-trends', async (req, res) => {
     const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
     const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
     
+    const ddosCertaintyParam = req.query.ddosCertainty as string;
+    const validDdosCertainty = new Set(['LOW', 'MEDIUM', 'HIGH']);
+    const ddosCertaintyValue = validDdosCertainty.has(ddosCertaintyParam) ? ddosCertaintyParam as 'LOW' | 'MEDIUM' | 'HIGH' : undefined;
+    
     // Map database values to MetricVersion enum
     const versionMapping: Record<string, MetricVersion> = {
       '2.0': MetricVersion.V20,
@@ -352,8 +364,8 @@ router.get('/stats/yearly-ddos-trends', async (req, res) => {
       '4.0': MetricVersion.V40
     };
     
-    const yearlyDdosData = await getYearlyDdosTrends(versionMapping[versionValue], undefined, statusValue);
-    res.json({ success: true, metricVersion: versionValue, statusFilter: statusValue, yearlyDdosData });
+    const yearlyDdosData = await getYearlyDdosTrends(versionMapping[versionValue], undefined, statusValue, ddosCertaintyValue);
+    res.json({ success: true, metricVersion: versionValue, statusFilter: statusValue, ddosCertainty: ddosCertaintyParam, yearlyDdosData });
   } catch (error: any) {
     console.error('Error getting yearly DDoS trends:', error);
     res.status(500).json({ success: false, error: error?.message || 'Failed to get yearly DDoS trends' });
@@ -368,10 +380,13 @@ router.get('/sample/ddos', async (req, res) => {
     const yearParam = req.query.year as string;
     const minScoreParam = req.query.minScore as string;
     const statusParam = (req.query.statusFilter as string) || 'accepted';
+    const ddosCertaintyParam = req.query.ddosCertainty as string;
     const validVersions = new Set(['2.0', '3.0', '3.1', '4.0']);
     const versionValue = validVersions.has(metricParam) ? metricParam : '3.1';
     const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
     const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
+    const validDdosCertainty = new Set(['LOW', 'MEDIUM', 'HIGH']);
+    const ddosCertaintyValue = validDdosCertainty.has(ddosCertaintyParam) ? ddosCertaintyParam as 'LOW' | 'MEDIUM' | 'HIGH' : undefined;
     
     // Load CVE data from the SQLite database
     const { CveSqliteManager } = await import('../scripts/saveToSqlite');
@@ -384,6 +399,11 @@ router.get('/sample/ddos', async (req, res) => {
       limit: limit,
       statusFilter: statusValue
     };
+
+    // Add DDoS certainty filter if specified
+    if (ddosCertaintyValue) {
+      queryOptions.ddosConfidence = ddosCertaintyValue;
+    }
     
     // Add year filter if specified
     if (yearParam && yearParam !== 'all') {
@@ -486,8 +506,10 @@ router.get('/stats/cvss-distribution', async (req, res) => {
     const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
     const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
     
-    const ddosOnlyParam = req.query.ddosOnly as string;
-    const isDdosRelated = ddosOnlyParam === 'true' ? true : undefined; // Show all by default, filter to DDoS only if requested
+    const ddosCertaintyParam = req.query.ddosCertainty as string;
+    const validDdosCertainty = new Set(['LOW', 'MEDIUM', 'HIGH']);
+    const ddosCertaintyValue = validDdosCertainty.has(ddosCertaintyParam) ? ddosCertaintyParam as 'LOW' | 'MEDIUM' | 'HIGH' : undefined;
+    const isDdosRelated = ddosCertaintyValue ? true : undefined; // Show all by default, filter to DDoS only if certainty is specified
     
     // Map database values to MetricVersion enum
     const versionMapping: Record<string, MetricVersion> = {
@@ -498,15 +520,15 @@ router.get('/stats/cvss-distribution', async (req, res) => {
     };
     
     const [scoreDistribution, scoreStats] = await Promise.all([
-      getCvssScoreDistribution(versionMapping[versionValue], undefined, statusValue, isDdosRelated),
-      getCvssScoreStats(versionMapping[versionValue], undefined, statusValue, isDdosRelated)
+      getCvssScoreDistribution(versionMapping[versionValue], undefined, statusValue, isDdosRelated, ddosCertaintyValue),
+      getCvssScoreStats(versionMapping[versionValue], undefined, statusValue, isDdosRelated, ddosCertaintyValue)
     ]);
     
     res.json({ 
       success: true, 
       metricVersion: versionValue, 
       statusFilter: statusValue,
-      ddosOnly: ddosOnlyParam === 'true',
+      ddosCertainty: ddosCertaintyParam,
       scoreDistribution,
       stats: {
         totalEntries: scoreStats.totalEntries,
@@ -529,8 +551,10 @@ router.get('/stats/cvss-boxplot', async (req, res) => {
     const validStatusFilters = new Set(['accepted', 'open-accepted', 'all']);
     const statusValue = validStatusFilters.has(statusParam) ? statusParam as 'accepted' | 'open-accepted' | 'all' : 'accepted';
     
-    const ddosOnlyParam = req.query.ddosOnly as string;
-    const isDdosRelated = ddosOnlyParam === 'true' ? true : undefined; // Show all by default, filter to DDoS only if requested
+    const ddosCertaintyParam = req.query.ddosCertainty as string;
+    const validDdosCertainty = new Set(['LOW', 'MEDIUM', 'HIGH']);
+    const ddosCertaintyValue = validDdosCertainty.has(ddosCertaintyParam) ? ddosCertaintyParam as 'LOW' | 'MEDIUM' | 'HIGH' : undefined;
+    const isDdosRelated = ddosCertaintyValue ? true : undefined; // Show all by default, filter to DDoS only if certainty is specified
     
     // Map database values to MetricVersion enum
     const versionMapping: Record<string, MetricVersion> = {
@@ -552,6 +576,7 @@ router.get('/stats/cvss-boxplot', async (req, res) => {
         const scores = await manager.getCvssScoresForBoxplot({
           metricVersion: versionKey,
           isDdosRelated: isDdosRelated,
+          ddosConfidence: ddosCertaintyValue,
           statusFilter: statusValue
         });
         
@@ -569,7 +594,7 @@ router.get('/stats/cvss-boxplot', async (req, res) => {
     res.json({ 
       success: true, 
       statusFilter: statusValue,
-      ddosOnly: ddosOnlyParam === 'true',
+      ddosCertainty: ddosCertaintyParam,
       boxplotData: boxplotData
     });
   } catch (error: any) {

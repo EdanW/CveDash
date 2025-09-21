@@ -341,11 +341,12 @@ export class CveSqliteManager {
     id?: string;
     metricVersion?: string;
     isDdosRelated?: boolean;
+    ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH';
     publishedAfter?: string;
     publishedBefore?: string;
     statusFilter?: 'accepted' | 'open-accepted' | 'all';
   } = {}): Promise<TableEntry[]> {
-    const { limit = 100, offset = 0, severity, minScore, maxScore, id, metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+    const { limit = 100, offset = 0, severity, minScore, maxScore, id, metricVersion, isDdosRelated, ddosConfidence, publishedAfter, publishedBefore, statusFilter } = options;
 
     await this.openDatabase();
 
@@ -380,6 +381,23 @@ export class CveSqliteManager {
     if (isDdosRelated !== undefined) {
       whereClause += whereClause ? ' AND isDdosRelated = ?' : ' WHERE isDdosRelated = ?';
       params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (ddosConfidence) {
+      // Filter based on DDoS certainty level - higher levels include lower ones
+      // LOW: include LOW, MEDIUM, HIGH (score 2+)
+      // MEDIUM: include MEDIUM, HIGH (score 4+)
+      // HIGH: include only HIGH (score 6+)
+      if (ddosConfidence === 'LOW') {
+        whereClause += whereClause ? ' AND ddosConfidence IN (?, ?, ?)' : ' WHERE ddosConfidence IN (?, ?, ?)';
+        params.push('LOW', 'MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'MEDIUM') {
+        whereClause += whereClause ? ' AND ddosConfidence IN (?, ?)' : ' WHERE ddosConfidence IN (?, ?)';
+        params.push('MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'HIGH') {
+        whereClause += whereClause ? ' AND ddosConfidence = ?' : ' WHERE ddosConfidence = ?';
+        params.push('HIGH');
+      }
     }
 
     if (publishedAfter) {
@@ -575,16 +593,31 @@ export class CveSqliteManager {
    */
   async getYearlyDdosTrends(options: {
     statusFilter?: 'accepted' | 'open-accepted' | 'all';
+    ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH';
   } = {}): Promise<Record<string, number>> {
     await this.openDatabase();
 
-    const { statusFilter } = options;
+    const { statusFilter, ddosConfidence } = options;
     
     let whereClause = `WHERE published IS NOT NULL
         AND published != ''
         AND isDdosRelated = 1
         AND CAST(strftime('%Y', published) AS INTEGER) BETWEEN 1998 AND 2025`;
     const params: any[] = [];
+
+    // Add DDoS certainty filtering
+    if (ddosConfidence) {
+      if (ddosConfidence === 'LOW') {
+        whereClause += ' AND ddosConfidence IN (?, ?, ?)';
+        params.push('LOW', 'MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'MEDIUM') {
+        whereClause += ' AND ddosConfidence IN (?, ?)';
+        params.push('MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'HIGH') {
+        whereClause += ' AND ddosConfidence = ?';
+        params.push('HIGH');
+      }
+    }
 
     // Add status filtering
     if (statusFilter === 'accepted') {
@@ -644,13 +677,14 @@ export class CveSqliteManager {
   async getSeverityDistribution(options: {
     metricVersion?: string;
     isDdosRelated?: boolean;
+    ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH';
     publishedAfter?: string;
     publishedBefore?: string;
     statusFilter?: 'accepted' | 'open-accepted' | 'all';
   } = {}): Promise<Record<string, number>> {
     await this.openDatabase();
 
-    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+    const { metricVersion, isDdosRelated, ddosConfidence, publishedAfter, publishedBefore, statusFilter } = options;
 
     let whereClause = '';
     const params: any[] = [];
@@ -663,6 +697,20 @@ export class CveSqliteManager {
     if (isDdosRelated !== undefined) {
       whereClause += whereClause ? ' AND isDdosRelated = ?' : ' WHERE isDdosRelated = ?';
       params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (ddosConfidence) {
+      // Filter based on DDoS certainty level - higher levels include lower ones
+      if (ddosConfidence === 'LOW') {
+        whereClause += whereClause ? ' AND ddosConfidence IN (?, ?, ?)' : ' WHERE ddosConfidence IN (?, ?, ?)';
+        params.push('LOW', 'MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'MEDIUM') {
+        whereClause += whereClause ? ' AND ddosConfidence IN (?, ?)' : ' WHERE ddosConfidence IN (?, ?)';
+        params.push('MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'HIGH') {
+        whereClause += whereClause ? ' AND ddosConfidence = ?' : ' WHERE ddosConfidence = ?';
+        params.push('HIGH');
+      }
     }
 
     if (publishedAfter) {
@@ -734,13 +782,14 @@ export class CveSqliteManager {
   async getAverageBaseScore(options: {
     metricVersion?: string;
     isDdosRelated?: boolean;
+    ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH';
     publishedAfter?: string;
     publishedBefore?: string;
     statusFilter?: 'accepted' | 'open-accepted' | 'all';
   } = {}): Promise<number> {
     await this.openDatabase();
 
-    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+    const { metricVersion, isDdosRelated, ddosConfidence, publishedAfter, publishedBefore, statusFilter } = options;
 
     let whereClause = 'WHERE baseScore IS NOT NULL AND baseScore >= 0';
     const params: any[] = [];
@@ -753,6 +802,20 @@ export class CveSqliteManager {
     if (isDdosRelated !== undefined) {
       whereClause += ' AND isDdosRelated = ?';
       params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (ddosConfidence) {
+      // Filter based on DDoS certainty level - higher levels include lower ones
+      if (ddosConfidence === 'LOW') {
+        whereClause += ' AND ddosConfidence IN (?, ?, ?)';
+        params.push('LOW', 'MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'MEDIUM') {
+        whereClause += ' AND ddosConfidence IN (?, ?)';
+        params.push('MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'HIGH') {
+        whereClause += ' AND ddosConfidence = ?';
+        params.push('HIGH');
+      }
     }
 
     if (publishedAfter) {
@@ -809,6 +872,7 @@ export class CveSqliteManager {
   async getCvssScoreDistribution(options: {
     metricVersion?: string;
     isDdosRelated?: boolean;
+    ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH';
     publishedAfter?: string;
     publishedBefore?: string;
     statusFilter?: 'accepted' | 'open-accepted' | 'all';
@@ -820,7 +884,7 @@ export class CveSqliteManager {
   }>> {
     await this.openDatabase();
 
-    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+    const { metricVersion, isDdosRelated, ddosConfidence, publishedAfter, publishedBefore, statusFilter } = options;
 
     let whereClause = 'WHERE baseScore IS NOT NULL AND baseScore >= 0';
     const params: any[] = [];
@@ -833,6 +897,20 @@ export class CveSqliteManager {
     if (isDdosRelated !== undefined) {
       whereClause += ' AND isDdosRelated = ?';
       params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (ddosConfidence) {
+      // Filter based on DDoS certainty level - higher levels include lower ones
+      if (ddosConfidence === 'LOW') {
+        whereClause += ' AND ddosConfidence IN (?, ?, ?)';
+        params.push('LOW', 'MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'MEDIUM') {
+        whereClause += ' AND ddosConfidence IN (?, ?)';
+        params.push('MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'HIGH') {
+        whereClause += ' AND ddosConfidence = ?';
+        params.push('HIGH');
+      }
     }
 
     if (publishedAfter) {
@@ -933,13 +1011,14 @@ export class CveSqliteManager {
   async getCvssScoresForBoxplot(options: {
     metricVersion?: string;
     isDdosRelated?: boolean;
+    ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH';
     publishedAfter?: string;
     publishedBefore?: string;
     statusFilter?: 'accepted' | 'open-accepted' | 'all';
   } = {}): Promise<number[]> {
     await this.openDatabase();
 
-    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+    const { metricVersion, isDdosRelated, ddosConfidence, publishedAfter, publishedBefore, statusFilter } = options;
 
     let whereClause = 'WHERE baseScore IS NOT NULL AND baseScore >= 0';
     const params: any[] = [];
@@ -952,6 +1031,20 @@ export class CveSqliteManager {
     if (isDdosRelated !== undefined) {
       whereClause += ' AND isDdosRelated = ?';
       params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (ddosConfidence) {
+      // Filter based on DDoS certainty level - higher levels include lower ones
+      if (ddosConfidence === 'LOW') {
+        whereClause += ' AND ddosConfidence IN (?, ?, ?)';
+        params.push('LOW', 'MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'MEDIUM') {
+        whereClause += ' AND ddosConfidence IN (?, ?)';
+        params.push('MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'HIGH') {
+        whereClause += ' AND ddosConfidence = ?';
+        params.push('HIGH');
+      }
     }
 
     if (publishedAfter) {
@@ -1004,6 +1097,7 @@ export class CveSqliteManager {
   async getCvssScoreStats(options: {
     metricVersion?: string;
     isDdosRelated?: boolean;
+    ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH';
     publishedAfter?: string;
     publishedBefore?: string;
     statusFilter?: 'accepted' | 'open-accepted' | 'all';
@@ -1014,7 +1108,7 @@ export class CveSqliteManager {
   }> {
     await this.openDatabase();
 
-    const { metricVersion, isDdosRelated, publishedAfter, publishedBefore, statusFilter } = options;
+    const { metricVersion, isDdosRelated, ddosConfidence, publishedAfter, publishedBefore, statusFilter } = options;
 
     let whereClause = 'WHERE baseScore IS NOT NULL AND baseScore >= 0';
     const params: any[] = [];
@@ -1027,6 +1121,20 @@ export class CveSqliteManager {
     if (isDdosRelated !== undefined) {
       whereClause += ' AND isDdosRelated = ?';
       params.push(isDdosRelated ? 1 : 0);
+    }
+
+    if (ddosConfidence) {
+      // Filter based on DDoS certainty level - higher levels include lower ones
+      if (ddosConfidence === 'LOW') {
+        whereClause += ' AND ddosConfidence IN (?, ?, ?)';
+        params.push('LOW', 'MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'MEDIUM') {
+        whereClause += ' AND ddosConfidence IN (?, ?)';
+        params.push('MEDIUM', 'HIGH');
+      } else if (ddosConfidence === 'HIGH') {
+        whereClause += ' AND ddosConfidence = ?';
+        params.push('HIGH');
+      }
     }
 
     if (publishedAfter) {

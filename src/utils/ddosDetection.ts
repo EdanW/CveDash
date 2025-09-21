@@ -307,15 +307,14 @@ export function getDdosAnalysisDetails(cve: any): DdosAnalysis {
   hasStrongDdosCwe(cwes) ||
   hasDdosRefHints(refs);
 
-  if (!hasDdosSignal) {
-    return { isDdosRelated: false,
-             reasons: [...gate.reasons, 'No DDoS-specific signal found'],
-             confidence: 'LOW' };
-  }
-  // Decision
+
+  // Decision based on score thresholds
   let confidence: Confidence = 'LOW';
   if (score >= 6) confidence = 'HIGH';
   else if (score >= 4) confidence = 'MEDIUM';
+  
+  // Consider DDoS-related if score >= 2 (includes LOW, MEDIUM, HIGH)
+  const isDdosRelated = score >= 2;
 
-  return { isDdosRelated: confidence !== 'LOW', reasons, confidence };
+  return { isDdosRelated, reasons, confidence };
 }

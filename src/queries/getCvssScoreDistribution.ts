@@ -14,7 +14,8 @@ export async function getCvssScoreDistribution(
   metricVersion: MetricVersion,
   dbPath?: string,
   statusFilter?: 'accepted' | 'open-accepted' | 'all',
-  isDdosRelated?: boolean
+  isDdosRelated?: boolean,
+  ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH'
 ): Promise<Array<{
   range: string;
   count: number;
@@ -29,6 +30,7 @@ export async function getCvssScoreDistribution(
     const scoreDistribution = await manager.getCvssScoreDistribution({
       metricVersion: metricVersion,
       isDdosRelated: isDdosRelated,
+      ddosConfidence: ddosConfidence,
       statusFilter: statusFilter || 'accepted'
     });
 
@@ -54,7 +56,8 @@ export async function getCvssScoreStats(
   metricVersion: MetricVersion,
   dbPath?: string,
   statusFilter?: 'accepted' | 'open-accepted' | 'all',
-  isDdosRelated?: boolean
+  isDdosRelated?: boolean,
+  ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH'
 ): Promise<{
   metricVersion: MetricVersion;
   totalEntries: number;
@@ -77,6 +80,7 @@ export async function getCvssScoreStats(
     const scoreDistribution = await manager.getCvssScoreDistribution({
       metricVersion: metricVersion,
       isDdosRelated: isDdosRelated,
+      ddosConfidence: ddosConfidence,
       statusFilter: statusFilter || 'accepted'
     });
 
@@ -99,12 +103,14 @@ export async function getCvssScoreStats(
     const averageScore = await manager.getAverageBaseScore({
       metricVersion: metricVersion,
       isDdosRelated: isDdosRelated,
+      ddosConfidence: ddosConfidence,
       statusFilter: statusFilter || 'accepted'
     });
 
     const scoreStats = await manager.getCvssScoreStats({
       metricVersion: metricVersion,
       isDdosRelated: isDdosRelated,
+      ddosConfidence: ddosConfidence,
       statusFilter: statusFilter || 'accepted'
     });
 

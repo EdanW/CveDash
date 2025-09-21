@@ -28,6 +28,15 @@
                         <option value="all">All (Including Rejected)</option>
                     </select>
                 </div>
+                <div class="ddos-certainty-toggle" aria-label="Select DDoS certainty level">
+                    <label for="ddosCertaintySelect" class="ddos-certainty-toggle__label">DDoS Certainty:</label>
+                    <select id="ddosCertaintySelect" class="ddos-certainty-toggle__select">
+                        <option value="all" selected>All Levels</option>
+                        <option value="LOW">Low (Score 2+)</option>
+                        <option value="MEDIUM">Medium (Score 4+)</option>
+                        <option value="HIGH">High (Score 6+)</option>
+                    </select>
+                </div>
             </div>
             <h1>🛡️ CVE Dashboard</h1>
             <p>Monitor and manage DDoS-related vulnerabilities</p>
@@ -47,7 +56,6 @@
                     <button class="btn btn-primary" onclick="searchCVE()">🔍 Search</button>
                 </div>
                 <button class="btn btn-success" onclick="refreshData()">🔄 Refresh</button>
-                <button class="btn btn-warning" onclick="filterDDoSOnly()">🛡️ DDoS Only</button>
             </div>
 
             <div class="charts-row">

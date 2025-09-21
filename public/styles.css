@@ -29,7 +29,7 @@ body {
     gap: 12px;
 }
 
-.metric-toggle, .status-toggle {
+.metric-toggle, .status-toggle, .ddos-certainty-toggle {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -39,13 +39,13 @@ body {
     backdrop-filter: blur(2px);
 }
 
-.metric-toggle__label, .status-toggle__label {
+.metric-toggle__label, .status-toggle__label, .ddos-certainty-toggle__label {
     font-size: 0.9rem;
     color: #fff;
     font-weight: 600;
 }
 
-.metric-toggle__select, .status-toggle__select {
+.metric-toggle__select, .status-toggle__select, .ddos-certainty-toggle__select {
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;

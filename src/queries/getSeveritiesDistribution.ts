@@ -11,7 +11,8 @@ import * as path from 'path';
 export async function getSeveritiesDistribution(
   metricVersion: MetricVersion,
   dbPath?: string,
-  statusFilter?: 'accepted' | 'open-accepted' | 'all'
+  statusFilter?: 'accepted' | 'open-accepted' | 'all',
+  ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH'
 ): Promise<Record<string, number>> {
   const databasePath = dbPath || path.resolve(process.cwd(), 'cve_database.db');
   const manager = new CveSqliteManager(databasePath);
@@ -21,6 +22,7 @@ export async function getSeveritiesDistribution(
     const distribution = await manager.getSeverityDistribution({
       metricVersion: metricVersion,
       isDdosRelated: true, // Get DDoS-related CVEs only
+      ddosConfidence: ddosConfidence, // Filter by DDoS certainty if specified
       statusFilter: statusFilter || 'accepted' // Default to accepted only
     });
 
@@ -161,7 +163,8 @@ export async function getYearlyCveTrends(
 export async function getYearlyDdosTrends(
   metricVersion: MetricVersion,
   dbPath?: string,
-  statusFilter?: 'accepted' | 'open-accepted' | 'all'
+  statusFilter?: 'accepted' | 'open-accepted' | 'all',
+  ddosConfidence?: 'LOW' | 'MEDIUM' | 'HIGH'
 ): Promise<Record<string, number>> {
   const databasePath = dbPath || path.resolve(process.cwd(), 'cve_database.db');
   const manager = new CveSqliteManager(databasePath);
@@ -169,7 +172,8 @@ export async function getYearlyDdosTrends(
   try {
     // Use optimized SQL query that handles uniqueness at database level
     const yearlyDistribution = await manager.getYearlyDdosTrends({
-      statusFilter: statusFilter || 'accepted'
+      statusFilter: statusFilter || 'accepted',
+      ddosConfidence: ddosConfidence
     });
     return yearlyDistribution;
 

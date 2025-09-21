@@ -1,11 +1,12 @@
 let cves = [];
 let allDDoSCVEs = [];
 let displayedCount = 3;
-let showDDoSOnly = false;
+// Removed showDDoSOnly - now using certainty-based filtering
 let selectedYear = 'all';
 let selectedMinScore = '0';
 let selectedSeverityLevels = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 let selectedStatusFilter = 'accepted';
+let selectedDdosCertainty = 'all';
 
 // Map frontend metric version values to database values
 function mapMetricVersion(frontendValue) {
@@ -23,6 +24,7 @@ function mapMetricVersion(frontendValue) {
 document.addEventListener('DOMContentLoaded', () => {
     initMetricToggle(); // Initialize metric version first
     initStatusFilter(); // Initialize status filter
+    initDdosCertaintyFilter(); // Initialize DDoS certainty filter
     initYearFilter(); // Initialize year filter
     initSeverityFilter(); // Initialize severity score filter
     initSeverityLevelFilter(); // Initialize severity level filter
@@ -53,7 +55,8 @@ async function loadDDoSCVEs() {
         const yearParam = selectedYear !== 'all' ? `&year=${encodeURIComponent(selectedYear)}` : '';
         const scoreParam = selectedMinScore !== '0' ? `&minScore=${encodeURIComponent(selectedMinScore)}` : '';
         const statusParam = selectedStatusFilter !== 'accepted' ? `&statusFilter=${encodeURIComponent(selectedStatusFilter)}` : '';
-        const response = await fetch(`/api/cves/sample/ddos?limit=90&metricVersion=${encodeURIComponent(mappedVersion)}${yearParam}${scoreParam}${statusParam}`);
+        const ddosCertaintyParam = selectedDdosCertainty !== 'all' ? `&ddosCertainty=${encodeURIComponent(selectedDdosCertainty)}` : '';
+        const response = await fetch(`/api/cves/sample/ddos?limit=90&metricVersion=${encodeURIComponent(mappedVersion)}${yearParam}${scoreParam}${statusParam}${ddosCertaintyParam}`);
         
         if (response.ok) {
             const data = await response.json();
@@ -120,7 +123,7 @@ function displayCVEs() {
     const container = document.getElementById('cvesContainer');
     container.innerHTML = '';
     
-    let filteredCVEs = showDDoSOnly ? cves.filter(cve => cve.ddosRelated) : cves;
+    let filteredCVEs = cves; // All CVEs are now DDoS-related, filtered by certainty level
     
     // Apply severity level filter
     filteredCVEs = filteredCVEs.filter(cve => selectedSeverityLevels.includes(cve.severity));
@@ -158,9 +161,7 @@ function displayCVEs() {
     });
     
     // Add "Show More" button if there are more CVEs to display
-    const allFilteredCVEs = showDDoSOnly ? 
-        allDDoSCVEs.filter(cve => cve.ddosRelated && selectedSeverityLevels.includes(cve.severity)) :
-        allDDoSCVEs.filter(cve => selectedSeverityLevels.includes(cve.severity));
+    const allFilteredCVEs = allDDoSCVEs.filter(cve => selectedSeverityLevels.includes(cve.severity));
     
     console.log('Debug - allFilteredCVEs.length:', allFilteredCVEs.length, 'displayedCount:', displayedCount);
     if (allFilteredCVEs.length > displayedCount) {
@@ -183,9 +184,7 @@ function showMoreCVEs() {
     const increment = 3; // Show 3 more at a time
     
     // Get all filtered CVEs based on current filters
-    const allFilteredCVEs = showDDoSOnly ? 
-        allDDoSCVEs.filter(cve => cve.ddosRelated && selectedSeverityLevels.includes(cve.severity)) :
-        allDDoSCVEs.filter(cve => selectedSeverityLevels.includes(cve.severity));
+    const allFilteredCVEs = allDDoSCVEs.filter(cve => selectedSeverityLevels.includes(cve.severity));
     
     displayedCount = Math.min(displayedCount + increment, allFilteredCVEs.length);
     cves = allFilteredCVEs.slice(0, displayedCount);
@@ -251,23 +250,7 @@ async function refreshData() {
     ]);
 }
 
-function filterDDoSOnly() {
-    showDDoSOnly = !showDDoSOnly;
-    const button = document.querySelector('.btn-warning, .btn-info');
-    if (showDDoSOnly) {
-        button.textContent = '🛡️ Show All';
-        button.classList.remove('btn-warning');
-        button.classList.add('btn-info');
-    } else {
-        button.textContent = '🛡️ DDoS Only';
-        button.classList.remove('btn-info');
-        button.classList.add('btn-warning');
-    }
-    
-    // Reset displayed count when filter changes
-    displayedCount = 3;
-    displayCVEs();
-}
+// filterDDoSOnly function removed - now using certainty-based filtering
 
 function formatDate(dateString) {
     return new Date(dateString).toLocaleDateString();
@@ -282,7 +265,8 @@ async function showSeverityDistribution() {
         const metricVersion = window.currentMetricVersion || 'latest';
         const mappedVersion = mapMetricVersion(metricVersion);
         const statusParam = selectedStatusFilter !== 'accepted' ? `&statusFilter=${encodeURIComponent(selectedStatusFilter)}` : '';
-        const response = await fetch(`/api/cves/stats/severity?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}`);
+        const ddosCertaintyParam = selectedDdosCertainty !== 'all' ? `&ddosCertainty=${encodeURIComponent(selectedDdosCertainty)}` : '';
+        const response = await fetch(`/api/cves/stats/severity?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}${ddosCertaintyParam}`);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -536,11 +520,12 @@ async function showYearlyTrends() {
         const metricVersion = window.currentMetricVersion || 'latest';
         const mappedVersion = mapMetricVersion(metricVersion);
         const statusParam = selectedStatusFilter !== 'accepted' ? `&statusFilter=${encodeURIComponent(selectedStatusFilter)}` : '';
+        const ddosCertaintyParam = selectedDdosCertainty !== 'all' ? `&ddosCertainty=${encodeURIComponent(selectedDdosCertainty)}` : '';
         
         // Fetch both all CVEs and DDoS-related CVEs data in parallel
         const [allCvesResponse, ddosCvesResponse] = await Promise.all([
-            fetch(`/api/cves/stats/yearly-trends?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}`),
-            fetch(`/api/cves/stats/yearly-ddos-trends?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}`)
+            fetch(`/api/cves/stats/yearly-trends?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}${ddosCertaintyParam}`),
+            fetch(`/api/cves/stats/yearly-ddos-trends?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}${ddosCertaintyParam}`)
         ]);
         
         if (!allCvesResponse.ok) {
@@ -798,12 +783,12 @@ async function showCvssDistribution() {
         const mappedVersion = mapMetricVersion(metricVersion);
         const statusParam = selectedStatusFilter !== 'accepted' ? `&statusFilter=${encodeURIComponent(selectedStatusFilter)}` : '';
         
-        // Check if we should show all CVEs or just DDoS-related ones
+        // Check if we should show all CVEs or filter by DDoS certainty
         const cvssToggle = document.getElementById('cvssShowAllToggle');
         const showAll = cvssToggle ? cvssToggle.checked : true;
-        const ddosParam = showAll ? '' : '&ddosOnly=true';
+        const ddosCertaintyParam = showAll ? '' : (selectedDdosCertainty !== 'all' ? `&ddosCertainty=${encodeURIComponent(selectedDdosCertainty)}` : '&ddosCertainty=LOW');
         
-        const response = await fetch(`/api/cves/stats/cvss-distribution?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}${ddosParam}`);
+        const response = await fetch(`/api/cves/stats/cvss-distribution?metricVersion=${encodeURIComponent(mappedVersion)}${statusParam}${ddosCertaintyParam}`);
         
         if (response.ok) {
             const data = await response.json();
@@ -1103,9 +1088,9 @@ async function showCvssBoxplot() {
         // Check if we should show DDoS only or all CVEs
         const cvssBoxplotToggle = document.getElementById('cvssBoxplotDdosToggle');
         const ddosOnly = cvssBoxplotToggle ? cvssBoxplotToggle.checked : false;
-        const ddosParam = ddosOnly ? '&ddosOnly=true' : '';
+        const ddosCertaintyParam = ddosOnly ? (selectedDdosCertainty !== 'all' ? `&ddosCertainty=${encodeURIComponent(selectedDdosCertainty)}` : '&ddosCertainty=LOW') : '';
         
-        const response = await fetch(`/api/cves/stats/cvss-boxplot?${statusParam}${ddosParam}`);
+        const response = await fetch(`/api/cves/stats/cvss-boxplot?${statusParam}${ddosCertaintyParam}`);
         
         if (response.ok) {
             const data = await response.json();
@@ -1408,23 +1393,7 @@ async function searchCVE() {
 function displaySearchResult(cve) {
     const searchResultsContent = document.getElementById('searchResultsContent');
     
-    // Check if DDoS filter is active and CVE is not DDoS-related
-    if (showDDoSOnly && !cve.ddosRelated) {
-        searchResultsContent.innerHTML = `
-            <div class="search-result">
-                <h4>🔍 CVE Found but Filtered Out</h4>
-                <p><strong>${cve.cveId}</strong> was found in the database but is not displayed because:</p>
-                <ul>
-                    <li>DDoS filter is currently active (🛡️ DDoS Only mode)</li>
-                    <li>This CVE is not DDoS-related</li>
-                </ul>
-                <p><strong>DDoS Related:</strong> 
-                <span style="color: #dc3545; font-weight: bold;">No</span></p>
-                <p><em>Switch to "Show All" mode to view this CVE, or search for a DDoS-related CVE.</em></p>
-            </div>
-        `;
-        return;
-    }
+    // All CVEs are now shown - filtering is handled by certainty level
     
     const severityClass = `severity-${cve.severity.toLowerCase()}`;
     const statusClass = `status-${cve.status.toLowerCase()}`;
@@ -1528,6 +1497,28 @@ function initStatusFilter() {
         localStorage.setItem('statusFilter', newValue);
         
         // Refetch data with new status filter
+        refreshData();
+    });
+}
+
+// DDoS Certainty filter initialization
+function initDdosCertaintyFilter() {
+    const select = document.getElementById('ddosCertaintySelect');
+    if (!select) return;
+    
+    // Load saved DDoS certainty from localStorage
+    const savedDdosCertainty = localStorage.getItem('selectedDdosCertainty') || 'all';
+    select.value = savedDdosCertainty;
+    selectedDdosCertainty = savedDdosCertainty;
+    
+    select.addEventListener('change', (e) => {
+        const newValue = e.target.value;
+        selectedDdosCertainty = newValue;
+        
+        // Persist the selection
+        localStorage.setItem('selectedDdosCertainty', newValue);
+        
+        // Refetch data with new DDoS certainty filter
         refreshData();
     });
 }
